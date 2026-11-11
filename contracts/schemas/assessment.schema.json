@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assess.avd-ops.dev/schemas/avd-assessment/v1.json",
+  "title": "avd-assessment/v1: one estate assessed with a pinned avd-assess method (assessment.json)",
+  "description": "Contract C21, written by avd-current-state's -Assess from a C11 snapshot, an optional C19 intake and the pinned method (C20). One row per check with its outcome and the pseudonyms and fact IDs it used, the pillar scores with their coverage, and each C14 decision's readiness. It holds no names, IDs or free text and passes the same guard as C11. Filed in the estate vault beside its snapshot.",
+  "type": "object",
+  "required": ["schema", "estate", "generatedUtc", "producer", "method", "inputs", "results", "pillars", "decisions"],
+  "additionalProperties": false,
+  "$defs": {
+    "utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "outcome": { "enum": ["pass", "warn", "gap", "unknown", "not-applicable"] },
+    "factId": { "type": "string", "pattern": "^(c11|c12|intake|liquidware)\\.[A-Za-z0-9.]{2,80}$" },
+    "pillar": { "enum": ["reliability", "security", "cost", "operations", "performance"] },
+    "plane": { "enum": ["azure", "entra", "intune", "m365", "power-platform"] },
+    "planeSummary": {
+      "type": "object",
+      "required": ["score", "coverage", "pass", "warn", "gap", "unknown"],
+      "additionalProperties": false,
+      "properties": {
+        "checks": { "type": "integer", "minimum": 0 },
+        "assessed": { "type": "integer", "minimum": 0 },
+        "score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "pass": { "type": "integer", "minimum": 0 },
+        "warn": { "type": "integer", "minimum": 0 },
+        "gap": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 },
+        "notApplicable": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema": { "const": "avd-assessment/v1" },
+    "estate": { "type": "string", "pattern": "^est-[0-9a-f]{8}$" },
+    "generatedUtc": { "$ref": "#/$defs/utc" },
+    "producer": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": { "name": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,60}$" }, "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" } }
+    },
+    "method": {
+      "type": "object",
+      "description": "The avd-assess method.json the report ran, as pinned in the producer's assess/PINS.json",
+      "required": ["version", "commit", "sha256", "factRegister"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "factRegister": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "required": ["facts"],
+      "additionalProperties": false,
+      "properties": {
+        "facts": {
+          "type": "object", "required": ["generatedUtc", "sha256"], "additionalProperties": false,
+          "properties": { "generatedUtc": { "$ref": "#/$defs/utc" }, "sha256": { "$ref": "#/$defs/sha256" } },
+          "description": "The C11 snapshot assessed"
+        },
+        "intake": {
+          "type": ["object", "null"], "required": ["answeredOn", "sha256"], "additionalProperties": false,
+          "properties": { "answeredOn": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }, "sha256": { "$ref": "#/$defs/sha256" } },
+          "description": "The C19 intake, or null when the operator hasn't answered it (intake facts are then unknown)"
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "description": "Exactly one row per check in the method. The check's outcome is its subjects' worst: gap, then warn, then unknown, then pass; with no subjects it is unknown.",
+      "items": {
+        "type": "object",
+        "required": ["check", "outcome", "facts", "subjects"],
+        "additionalProperties": false,
+        "properties": {
+          "check": { "type": "string", "pattern": "^asm-[a-z0-9-]{3,60}$" },
+          "plane": { "$ref": "#/$defs/plane" },
+          "outcome": { "$ref": "#/$defs/outcome" },
+          "reason": { "enum": ["unsupported-in-cloud", "not-in-scope", "no-subjects"] },
+          "facts": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/factId" }, "description": "The check's facts that the inputs actually had" },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "outcome"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^(est|sub|hp|st)-[0-9a-f]{8}$" },
+                "outcome": { "$ref": "#/$defs/outcome" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "pillars": {
+      "type": "array",
+      "description": "Recomputable from results and the method's scoring; Test-AssessmentReport recomputes it",
+      "items": {
+        "type": "object",
+        "required": ["pillar", "checks", "assessed", "score", "coverage"],
+        "additionalProperties": false,
+        "properties": {
+          "pillar": { "$ref": "#/$defs/pillar" },
+          "checks": { "type": "integer", "minimum": 0 },
+          "assessed": { "type": "integer", "minimum": 0, "description": "Checks whose outcome isn't unknown or not-applicable" },
+          "notApplicable": { "type": "integer", "minimum": 0 },
+          "score": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "null when nothing in the pillar could be assessed" },
+          "coverage": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "planes": {
+      "type": "object",
+      "description": "Secondary rollup by target-state control plane (methods/scoring.md); Test-AssessmentReport recomputes it",
+      "additionalProperties": false,
+      "properties": {
+        "azure": { "$ref": "#/$defs/planeSummary" },
+        "entra": { "$ref": "#/$defs/planeSummary" },
+        "intune": { "$ref": "#/$defs/planeSummary" },
+        "m365": { "$ref": "#/$defs/planeSummary" },
+        "power-platform": { "$ref": "#/$defs/planeSummary" }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "One row per C14 decision: the method's readiness, and whether this estate's inputs supply what it needs",
+      "items": {
+        "type": "object",
+        "required": ["decision", "readiness", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "decision": { "type": "string", "pattern": "^[a-z][A-Za-z.]{1,40}$" },
+          "readiness": { "enum": ["decidable", "decidable-with-intake", "needs-measurement"] },
+          "status": { "enum": ["supported", "needs-intake", "needs-measurement", "missing-facts"] }
+        }
+      }
+    }
+  }
+}

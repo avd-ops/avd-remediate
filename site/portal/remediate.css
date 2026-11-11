@@ -1,0 +1,572 @@
+/* avd-remediate portal stylesheet v0.1.0.
+   Built exclusively on avd-ops.css tokens (ds-v2.7.0). No hex literals, no external fonts, no inline styles. */
+
+html {
+  scroll-padding-top: calc(var(--bar) + env(safe-area-inset-top, 0px) + 16px);
+  scroll-padding-bottom: 96px;
+}
+
+.shell main {
+  padding-block: 0;
+}
+
+.portal .step-col {
+  min-width: 0;
+}
+
+/* Override avd-ops-portal.css global button fill (.portal :is(button:hover:not(:disabled),a.btnlink:hover) = 0,3,1)
+   on shell header buttons, wizard rail buttons, and backdrop buttons. */
+.portal.shell header.bar button.iconbtn,
+.portal.shell header.bar button.iconbtn:hover:not(:disabled) {
+  padding: 0;
+  background: transparent;
+  color: var(--shell-fg);
+  border: 1px solid var(--shell-line);
+}
+
+.portal.shell header.bar button.iconbtn:hover:not(:disabled) {
+  background: var(--shell-hover);
+  border-color: var(--shell-line);
+}
+
+.portal .wz-rail button.wz-tool,
+.portal .wz-rail button.wz-tool:hover:not(:disabled) {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.portal .wz-rail button.wz-tool:hover:not(:disabled),
+.portal .wz-rail button.wz-tool[aria-expanded="true"] {
+  background: var(--sunken);
+  color: var(--fg);
+  border: 0;
+}
+
+.portal .wz-rail .wz-list button.step,
+.portal .wz-rail .wz-list button.step:hover:not(:disabled) {
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+}
+
+.portal .wz-rail .wz-list button.step:hover:not(:disabled) {
+  background: var(--sunken);
+}
+
+.portal .wz-rail .wz-list button.step[aria-current="step"],
+.portal .wz-rail .wz-list button.step[aria-current="step"]:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 0;
+}
+
+.portal button.sheet-backdrop,
+.portal button.sheet-backdrop:hover:not(:disabled) {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: var(--shell);
+}
+
+/* Split workbench layout: wizard on the left, docked chat assistant on wide screens */
+.portal .wb-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 82rem) {
+  body.portal.chat-open .wb-shell {
+    grid-template-columns: minmax(0, 1fr) 23rem;
+    gap: var(--space-5);
+    max-width: calc(var(--page) + 23rem);
+    margin: 0 auto;
+  }
+}
+
+/* Form rows & fields: align from the top so helper <small> text of different heights never misaligns inputs,
+   and leave breathing room before the .act button row. */
+.portal .wz-stage .row {
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.portal .wz-stage .row + .row {
+  margin-top: var(--space-3);
+}
+
+.portal .wz-stage .field {
+  flex: 1 1 20rem;
+}
+
+.portal .wz-stage .field > small {
+  margin-top: 2px;
+  line-height: 1.45;
+}
+
+.portal .wz-stage .act {
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.portal .slot .act {
+  margin-top: var(--space-3);
+  margin-bottom: 0;
+}
+
+.portal .wz-stage h3 {
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.portal .reply {
+  margin-bottom: var(--space-4);
+}
+
+.portal .card {
+  margin-bottom: var(--space-4);
+}
+
+/* Header bar Chat toggle pill */
+.portal.shell header.bar button.chat-toggle,
+.portal.shell header.bar button.chat-toggle:hover:not(:disabled) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--pill);
+  border: 1px solid var(--shell-line);
+  background: transparent;
+  color: var(--shell-fg);
+  font: 600 .8rem/1 var(--mono);
+  cursor: pointer;
+}
+
+.portal.shell header.bar button.chat-toggle:hover:not(:disabled),
+.portal.shell header.bar button.chat-toggle[aria-expanded="true"] {
+  background: var(--shell-hover);
+  border-color: var(--brand);
+  color: var(--shell-fg);
+}
+
+.portal.shell header.bar button.chat-toggle svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+@media (pointer: coarse) {
+  .shell header.bar .chat-toggle {
+    min-height: var(--tap);
+  }
+}
+
+@media (max-width: 44rem) {
+  .shell header.bar .chat-toggle .chat-label {
+    display: none;
+  }
+  .shell header.bar .chat-toggle {
+    padding: 0 10px;
+  }
+}
+
+/* Domain cards & playbook selector grid */
+.portal .domain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+.portal button.domain-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  text-align: left;
+  padding: 14px 16px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-weight: 400;
+}
+
+.portal button.domain-card:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.portal button.domain-card[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--fg);
+}
+
+.portal button.domain-card .d-title {
+  font: 600 .94rem/1.25 var(--display);
+  color: var(--fg);
+}
+
+.portal button.domain-card .d-desc {
+  font-size: .8rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* Sandbox connection banner */
+.portal .sandbox-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: 12px 16px;
+  margin-bottom: var(--space-4);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: .86rem;
+}
+
+.portal .sandbox-bar .sb-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+/* Docked / Sheet Chat Assistant Drawer */
+.portal aside.chat-drawer {
+  position: fixed;
+  z-index: 40;
+  top: calc(var(--bar) + 1px + env(safe-area-inset-top, 0px));
+  right: 0;
+  bottom: 0;
+  width: min(25rem, 100vw);
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 82rem) {
+  body.portal.chat-open aside.chat-drawer {
+    position: sticky;
+    z-index: 10;
+    width: 23rem;
+    height: calc(100svh - var(--bar) - 2px);
+    box-shadow: none;
+  }
+  body.portal.chat-open button.chat-backdrop {
+    display: none !important;
+  }
+}
+
+.portal .chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sunken);
+}
+
+.portal .chat-head h2 {
+  font: 700 .98rem/1.2 var(--display);
+  margin: 0;
+}
+
+.portal .chat-privacy {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  font-size: .76rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.portal .chat-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.portal .chat-msg {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--sunken);
+  font-size: .86rem;
+}
+
+.portal .chat-msg p {
+  margin: 0 0 var(--space-2);
+}
+
+.portal .chat-msg.user {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  align-self: flex-end;
+  max-width: 90%;
+}
+
+.portal .chat-msg.user p:last-child {
+  margin-bottom: 0;
+}
+
+.portal .chat-msg.assistant {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow);
+}
+
+.portal .chat-msg .msg-bl {
+  font: 600 .92rem/1.3 var(--display);
+  margin: 0 0 6px;
+  color: var(--fg);
+}
+
+.portal .chat-msg .msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.portal .chat-msg .msg-actions button {
+  padding: 4px 10px;
+  font-size: .78rem;
+}
+
+.portal .chat-msg details.more {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.portal .chat-msg details.more ul {
+  margin: var(--space-1) 0 0;
+  padding-left: 1.1rem;
+  font-size: .8rem;
+}
+
+.portal .chat-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--sunken);
+}
+
+.portal .chat-prompts button.prompt-chip {
+  padding: 4px 10px;
+  font-size: .75rem;
+  font-weight: 500;
+  border-radius: var(--pill);
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--line-strong);
+}
+
+.portal .chat-prompts button.prompt-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.portal .chat-form {
+  display: flex;
+  gap: var(--space-2);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.portal .chat-form input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Sheet header row */
+.portal .panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.portal .panel-head h2 {
+  margin: 0;
+}
+
+.portal .sheet .runin {
+  margin: var(--space-3) 0;
+}
+
+/* Native modal dialog for explicit remediation approval */
+.portal dialog.approval-modal {
+  max-width: 34rem;
+  width: calc(100vw - 2rem);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--fg);
+  padding: 24px;
+  box-shadow: var(--shadow-2);
+}
+
+.portal dialog.approval-modal::backdrop {
+  background: var(--shell);
+  opacity: .55;
+}
+
+.portal dialog.approval-modal h2 {
+  font-size: 1.25rem;
+  margin: 0 0 var(--space-2);
+}
+
+.portal .path-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+/* Vault explorer toolbar & responsive table */
+.portal .vault-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+.portal .vault-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.portal .vault-filters button.vault-cat-btn {
+  padding: 5px 12px;
+  font-size: .78rem;
+}
+
+.portal .vault-search-field {
+  flex: 1 1 15rem;
+  max-width: 22rem;
+  margin: 0;
+}
+
+.portal .vault-table-wrap {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(460px, 75vh);
+  container-type: inline-size;
+}
+
+.portal .vault-table-wrap table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  --label-2: "Category";
+  --label-3: "Path & date";
+  --label-4: "Action";
+}
+
+.portal .vault-table-wrap thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--sunken);
+}
+
+.portal .vault-table-wrap tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  background: var(--surface);
+  text-align: left;
+  font-weight: 600;
+  vertical-align: top;
+}
+
+.portal .vault-note-summary {
+  display: block;
+  margin-top: 4px;
+  font-weight: 400;
+  font-size: .8rem;
+  color: var(--muted);
+}
+
+.portal .vault-note-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+@container (width < 600px) {
+  .portal .vault-table-wrap table,
+  .portal .vault-table-wrap thead,
+  .portal .vault-table-wrap tbody,
+  .portal .vault-table-wrap tr,
+  .portal .vault-table-wrap th,
+  .portal .vault-table-wrap td {
+    display: block;
+  }
+
+  .portal .vault-table-wrap thead {
+    display: none;
+  }
+
+  .portal .vault-table-wrap tr {
+    margin-block-end: var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+  }
+
+  .portal .vault-table-wrap tbody th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: var(--sunken);
+  }
+
+  .portal .vault-table-wrap td:nth-child(2)::before {
+    content: var(--label-2) ": ";
+    font-weight: 600;
+  }
+
+  .portal .vault-table-wrap td:nth-child(3)::before {
+    content: var(--label-3) ": ";
+    font-weight: 600;
+  }
+
+  .portal .vault-table-wrap td:nth-child(4)::before {
+    content: var(--label-4) ": ";
+    font-weight: 600;
+  }
+}
+
+.portal .settings-llm-card {
+  margin-top: var(--space-4);
+}

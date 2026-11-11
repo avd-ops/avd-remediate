@@ -1,0 +1,300 @@
+{
+  "schema": "avd-current-state-lz-parameters/v1",
+  "description": "The avd-landing-zone parameters a rebuild map covers, taken from bicep/main.bicep at landingZoneCommit. Defaults are the Bicep text. CI fails when that commit's main.bicep lists a parameter this file doesn't (.github/workflows/test.yml).",
+  "source": "https://github.com/avd-ops/avd-landing-zone/blob/2c441569a5d584ac6beb473162ba1f1420caea3e/bicep/main.bicep",
+  "landingZoneCommit": "2c441569a5d584ac6beb473162ba1f1420caea3e",
+  "parameters": [
+    {
+      "name": "namePrefix",
+      "type": "string"
+    },
+    {
+      "name": "environmentName",
+      "type": "string",
+      "allowed": [
+        "dev",
+        "test",
+        "prod"
+      ]
+    },
+    {
+      "name": "location",
+      "type": "string",
+      "default": "deployment().location"
+    },
+    {
+      "name": "tags",
+      "type": "object",
+      "default": "{}"
+    },
+    {
+      "name": "avdUsersGroupObjectId",
+      "type": "string"
+    },
+    {
+      "name": "avdAdminsGroupObjectId",
+      "type": "string"
+    },
+    {
+      "name": "avdServicePrincipalObjectId",
+      "type": "string"
+    },
+    {
+      "name": "enrollInIntune",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "connectivityMode",
+      "type": "string",
+      "default": "'Standalone'",
+      "allowed": [
+        "Standalone",
+        "HubPeered"
+      ]
+    },
+    {
+      "name": "spokeAddressPrefix",
+      "type": "string",
+      "default": "'10.100.0.0/22'"
+    },
+    {
+      "name": "sessionHostSubnetPrefix",
+      "type": "string",
+      "default": "'10.100.0.0/23'"
+    },
+    {
+      "name": "privateEndpointSubnetPrefix",
+      "type": "string",
+      "default": "'10.100.2.0/27'"
+    },
+    {
+      "name": "deployImageBuildSubnets",
+      "type": "bool",
+      "default": "false"
+    },
+    {
+      "name": "imageBuildSubnetPrefix",
+      "type": "string",
+      "default": "'10.100.2.128/27'"
+    },
+    {
+      "name": "imageBuildAciSubnetPrefix",
+      "type": "string",
+      "default": "'10.100.2.160/27'"
+    },
+    {
+      "name": "hubVnetResourceId",
+      "type": "string",
+      "default": "''"
+    },
+    {
+      "name": "createHubToSpokePeering",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "hubFirewallPrivateIp",
+      "type": "string",
+      "default": "''"
+    },
+    {
+      "name": "dnsServers",
+      "type": "array",
+      "default": "[]"
+    },
+    {
+      "name": "centralPrivateDnsZoneResourceIds",
+      "type": "object",
+      "default": "{}"
+    },
+    {
+      "name": "enableAvdPrivateLink",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "sessionHostCount",
+      "type": "int",
+      "default": "2"
+    },
+    {
+      "name": "sessionHostVmSize",
+      "type": "string",
+      "default": "'Standard_E4as_v5'"
+    },
+    {
+      "name": "sessionHostNamePrefix",
+      "type": "string",
+      "default": "take('${toLower(replace(namePrefix, '-', ''))}${take(environmentName, 1)}sh', 11)"
+    },
+    {
+      "name": "availabilityZones",
+      "type": "int[]",
+      "default": "[ 1 2 3 ]"
+    },
+    {
+      "name": "sessionHostImage",
+      "type": "object",
+      "default": "{ publisher: 'MicrosoftWindowsDesktop' offer: 'office-365' sku: 'win11-24h2-avd-m365' version: 'latest' }"
+    },
+    {
+      "name": "maxSessionLimit",
+      "type": "int",
+      "default": "8"
+    },
+    {
+      "name": "encryptionAtHost",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "localAdminUsername",
+      "type": "string",
+      "default": "'avdbreakglass'"
+    },
+    {
+      "name": "localAdminPassword",
+      "type": "string",
+      "secure": true
+    },
+    {
+      "name": "rdpProperties",
+      "type": "string",
+      "default": "'enablerdsaadauth:i:1;targetisaadjoined:i:1;drivestoredirect:s:;usbdevicestoredirect:s:;redirectcomports:i:0;redirectsmartcards:i:1;redirectprinters:i:1;redirectclipboard:i:1;redirectwebauthn:i:1;audiomode:i:0;audiocapturemode:i:1;camerastoredirect:s:*;use multimon:i:1'"
+    },
+    {
+      "name": "validationEnvironment",
+      "type": "bool",
+      "default": "environmentName != 'prod'"
+    },
+    {
+      "name": "profileStorageSku",
+      "type": "string",
+      "default": "'Premium_ZRS'",
+      "allowed": [
+        "Premium_LRS",
+        "Premium_ZRS"
+      ]
+    },
+    {
+      "name": "profileShareQuotaGiB",
+      "type": "int",
+      "default": "1024"
+    },
+    {
+      "name": "fslogixProfileSizeMiB",
+      "type": "int",
+      "default": "30720"
+    },
+    {
+      "name": "enableProfileBackup",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "profileBackupRetentionDays",
+      "type": "int",
+      "default": "30"
+    },
+    {
+      "name": "startVmOnConnect",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "scalingTimeZone",
+      "type": "string",
+      "default": "'UTC'"
+    },
+    {
+      "name": "logRetentionDays",
+      "type": "int",
+      "default": "90"
+    },
+    {
+      "name": "alertEmailAddresses",
+      "type": "string[]",
+      "default": "[]"
+    },
+    {
+      "name": "monthlyBudgetAmount",
+      "type": "int",
+      "default": "0"
+    },
+    {
+      "name": "budgetStartDate",
+      "type": "string",
+      "default": "''"
+    },
+    {
+      "name": "enableAutoShutdown",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "autoShutdownTime",
+      "type": "string",
+      "default": "''"
+    },
+    {
+      "name": "autoShutdownDays",
+      "type": "string[]",
+      "default": "[ 'Monday' 'Tuesday' 'Wednesday' 'Thursday' 'Friday' 'Saturday' 'Sunday' ]"
+    },
+    {
+      "name": "autoShutdownTimeZone",
+      "type": "string",
+      "default": "scalingTimeZone"
+    },
+    {
+      "name": "autoShutdownScheduleAction",
+      "type": "string",
+      "default": "'Stop'",
+      "allowed": [
+        "Stop",
+        "Lock"
+      ]
+    },
+    {
+      "name": "autoShutdownBudgetAction",
+      "type": "string",
+      "default": "'Lock'",
+      "allowed": [
+        "Lock",
+        "Stop",
+        "None"
+      ]
+    },
+    {
+      "name": "autoShutdownBudgetPercent",
+      "type": "int",
+      "default": "100"
+    },
+    {
+      "name": "autoShutdownRunbookUri",
+      "type": "string",
+      "default": "'https://raw.githubusercontent.com/avd-ops/avd-landing-zone/master/scripts/automation/Invoke-AvdPowerAction.ps1'"
+    },
+    {
+      "name": "enableDefenderForCloud",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "deploySubscriptionSettings",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "enablePolicyGuardrails",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "name": "allowedLocations",
+      "type": "string[]",
+      "default": "[ location ]"
+    }
+  ]
+}

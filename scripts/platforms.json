@@ -1,0 +1,32 @@
+{
+  "scripts": {
+    "./scripts/Invoke-AvdDiagnosticProbe.ps1": {
+      "cloudshell:pwsh": { "status": "tested" },
+      "cloudshell:bash": { "status": "tested" },
+      "windows:pwsh": { "status": "tested", "requires": "PowerShell 7, Azure CLI (az)" },
+      "macos:pwsh": { "status": "tested", "requires": "PowerShell 7, Azure CLI (az)" },
+      "macos:bash": { "status": "tested", "requires": "PowerShell 7 (pwsh), Azure CLI (az)" }
+    },
+    "./scripts/Invoke-AvdRemediationPlan.ps1": {
+      "cloudshell:pwsh": { "status": "tested" },
+      "cloudshell:bash": { "status": "tested" },
+      "windows:pwsh": { "status": "tested", "requires": "PowerShell 7, Azure CLI (az)" },
+      "macos:pwsh": { "status": "tested", "requires": "PowerShell 7, Azure CLI (az)" },
+      "macos:bash": { "status": "tested", "requires": "PowerShell 7 (pwsh), Azure CLI (az)" }
+    },
+    "./scripts/ConvertFrom-AvdRemediationPlan.ps1": {
+      "cloudshell:pwsh": { "status": "tested" },
+      "cloudshell:bash": { "status": "tested" },
+      "windows:pwsh": { "status": "tested", "requires": "PowerShell 7" },
+      "macos:pwsh": { "status": "tested", "requires": "PowerShell 7" },
+      "macos:bash": { "status": "tested", "requires": "PowerShell 7 (pwsh)" }
+    },
+    "./scripts/Save-AvdIncidentBundle.ps1": {
+      "cloudshell:pwsh": { "status": "tested" },
+      "cloudshell:bash": { "status": "tested" },
+      "windows:pwsh": { "status": "tested", "requires": "PowerShell 7" },
+      "macos:pwsh": { "status": "tested", "requires": "PowerShell 7" },
+      "macos:bash": { "status": "tested", "requires": "PowerShell 7 (pwsh)" }
+    }
+  }
+}

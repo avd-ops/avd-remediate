@@ -1,0 +1,941 @@
+{
+  "version": "1.0.0",
+  "domains": [
+    {
+      "id": "connectivity",
+      "label": "Session connectivity & protocol",
+      "summary": "Black screen, connection drops, RDP Shortpath / UDP fallback, Private Link DNS, high RTT or jitter"
+    },
+    {
+      "id": "fslogix",
+      "label": "Logon & FSLogix profiles",
+      "summary": "Profile mount failures, Azure Files Entra Kerberos SMB auth, VHDX session locks, storage latency"
+    },
+    {
+      "id": "hosts",
+      "label": "Session host health & capacity",
+      "summary": "Unavailable hosts, SxS / RDAgent health checks, drain mode / capacity exhaustion, CPU or RAM contention"
+    },
+    {
+      "id": "identity-m365",
+      "label": "Identity, Intune & M365 VDI",
+      "summary": "Entra SSO sign-in loops, Conditional Access blocks, Intune Settings Catalog drift, Teams SlimCore & OneDrive KFM"
+    },
+    {
+      "id": "control-planes",
+      "label": "Control-plane deployment & day-2 drift",
+      "summary": "Multi-plane stage handoff drift (Entra, Intune, M365, Azure, Power Platform) and DLP / VNet enterprise policies"
+    }
+  ],
+  "playbooks": [
+    {
+      "id": "pb-conn-shortpath-blocked",
+      "domain": "connectivity",
+      "plane": "intune",
+      "pillar": "performance",
+      "severity": "medium",
+      "title": "RDP Shortpath UDP transport disabled or falling back to TCP relay",
+      "bottomLine": "Sessions are riding TCP reverse-connect instead of UDP Shortpath because the Intune multi-session Shortpath policy or UDP 3390 path is missing.",
+      "keywords": [
+        "shortpath",
+        "udp",
+        "3390",
+        "latency",
+        "jitter",
+        "choppy",
+        "stun",
+        "turn",
+        "relay",
+        "tcp fallback"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.intune.rdpShortpathConfigured",
+          "equals": false
+        }
+      ],
+      "c21Checks": [
+        "asm-net-shortpath",
+        "asm-intune-rdp-shortpath",
+        "asm-insights-rtt-target"
+      ],
+      "probeId": "probe-conn-shortpath-transport",
+      "citations": [
+        {
+          "id": "ref:avd-prerequisites#rtt-under-150",
+          "source": "avd-assess:methods/remote-protocols.md",
+          "claim": "Enabling RDP Shortpath over managed and public networks reduces round-trip time and jitter compared to gateway-relayed TCP."
+        },
+        {
+          "id": "obs:shortpath-intune-catalog",
+          "source": "avd-second-brain:docs/knowledge/networking/rdp-shortpath.md",
+          "claim": "Multi-session hosts require the Intune Settings Catalog RDP Shortpath policy and outbound STUN/TURN reachability."
+        }
+      ],
+      "remediation": {
+        "plane": "intune",
+        "kind": "lz-setting",
+        "name": "intune-settings-catalog-shortpath",
+        "costEstimate": "$0.00 (policy & host listener configuration only)",
+        "blastRadius": "Session hosts in the target dynamic host group; active sessions keep their transport until reconnect.",
+        "actionSummary": "Enable the Intune Settings Catalog RDP Shortpath profile and verify UDP 3390 listener on session hosts.",
+        "rollbackSummary": "Restore previous Settings Catalog assignment state from rollback snapshot.",
+        "c24Change": {
+          "kind": "lz-setting",
+          "plane": "intune",
+          "name": "intune-settings-catalog-shortpath"
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-intune",
+          "deployEntrypoint": "scripts/Deploy-AvdIntune.ps1",
+          "manifest": "intune-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes intune -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-connection-transport-rtt-24h.kql"
+      }
+    },
+    {
+      "id": "pb-conn-black-screen-sxs",
+      "domain": "connectivity",
+      "plane": "azure",
+      "pillar": "reliability",
+      "severity": "high",
+      "title": "Black screen on connect or immediate session disconnect (0x3000046)",
+      "bottomLine": "The session broker connected the user, but Windows shell initialization stalled due to a hung FSLogix/AppX readiness task or outdated SxS stack.",
+      "keywords": [
+        "black screen",
+        "0x3000046",
+        "0x3000008",
+        "blank screen",
+        "appx",
+        "wdot",
+        "sxs",
+        "shell",
+        "disconnect immediately"
+      ],
+      "c11Triggers": [],
+      "c21Checks": [
+        "asm-host-agent-health",
+        "asm-insights-connection-reliability"
+      ],
+      "probeId": "probe-conn-black-screen-events",
+      "citations": [
+        {
+          "id": "ref:diagnostics-log-analytics#connection-states",
+          "source": "avd-assess:methods/diagnostics.md",
+          "claim": "WVDCheckpoints and LocalSessionManager operational events isolate whether a black screen sits in FSLogix LoadProfile or AppXReadiness."
+        },
+        {
+          "id": "obs:wdot-appx-shell-hang",
+          "source": "avd-second-brain:docs/knowledge/images/wdot.md",
+          "claim": "Stripping required system AppX packages without the reviewed WDOT profile can stall Explorer shell startup."
+        }
+      ],
+      "remediation": {
+        "plane": "azure",
+        "kind": "day2-runbook",
+        "name": "drain-and-reset-stuck-host-sessions",
+        "costEstimate": "$0.00 (places affected host in drain mode and resets hung session processes)",
+        "blastRadius": "Single affected session host; new logons route to healthy hosts in the pool.",
+        "actionSummary": "Enable drain mode on the affected host, log off hung ghost sessions, and verify RDAgent/SxS stack status.",
+        "rollbackSummary": "Re-enable allowNewSession ($true) on the session host.",
+        "c24Change": {
+          "kind": "manual",
+          "plane": "azure",
+          "code": "rebuild-hosts"
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-azure",
+          "deployEntrypoint": "scripts/deploy/deploy.sh",
+          "manifest": "azure-outputs.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes azure -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-connection-errors-last-24h.kql"
+      }
+    },
+    {
+      "id": "pb-conn-private-link-dns",
+      "domain": "connectivity",
+      "plane": "azure",
+      "pillar": "security",
+      "severity": "high",
+      "title": "Private Link feed or connection failure from missing Private DNS zone link",
+      "bottomLine": "Private Endpoints are enabled on the workspace or host pool, but the spoke VNet is missing a virtual network link to privatelink.wvd.microsoft.com.",
+      "keywords": [
+        "private link",
+        "privatelink",
+        "dns",
+        "nxdomain",
+        "feed",
+        "workspace",
+        "connection failed",
+        "privatelink.wvd.microsoft.com"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.network.privateEndpoints",
+          "equals": 0
+        }
+      ],
+      "c21Checks": [
+        "asm-net-private-link-dns",
+        "asm-files-private-endpoint"
+      ],
+      "probeId": "probe-conn-private-dns",
+      "citations": [
+        {
+          "id": "ref:review-checklists-avd#F01.10",
+          "source": "avd-assess:methods/network.md",
+          "claim": "Both privatelink.wvd.microsoft.com and privatelink-global.wvd.microsoft.com must resolve across the session host and client VNets."
+        }
+      ],
+      "remediation": {
+        "plane": "azure",
+        "kind": "lz-parameter",
+        "name": "enablePrivateLinkDnsLinks",
+        "costEstimate": "$0.00 (links existing Private DNS zones to the spoke VNet)",
+        "blastRadius": "DNS resolution for *.wvd.microsoft.com inside the linked VNet.",
+        "actionSummary": "Link the Private DNS zones to the session host VNet and verify Private Endpoint connection state is Approved.",
+        "rollbackSummary": "Remove the VNet link recorded in the rollback snapshot.",
+        "c24Change": {
+          "kind": "lz-parameter",
+          "plane": "azure",
+          "name": "enableAvdPrivateLink",
+          "to": true
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-azure",
+          "deployEntrypoint": "scripts/deploy/deploy.sh",
+          "manifest": "azure-outputs.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes azure -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-connection-errors-last-24h.kql"
+      }
+    },
+    {
+      "id": "pb-fsx-kerberos-smb-auth",
+      "domain": "fslogix",
+      "plane": "entra",
+      "pillar": "security",
+      "severity": "high",
+      "title": "FSLogix profile mount fails with Access Denied (0x0000052e / 0xC0000022) on Entra-joined host",
+      "bottomLine": "Entra Kerberos is either missing consent on the storage service principal, or Azure Files SMB channel encryption is set to AES-256-GCM only (which rejects Entra Kerberos SESSION_SETUP with 0xC0000022 unless AES-128-GCM is also enabled).",
+      "keywords": [
+        "fslogix",
+        "kerberos",
+        "0x0000052e",
+        "0xc0000022",
+        "aes-128-gcm",
+        "aes-256-gcm",
+        "channel encryption",
+        "access denied",
+        "azure files",
+        "smb",
+        "mount",
+        "profile failed",
+        "aadkerberos"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.entra.kerberosStoragePrincipalsReady",
+          "equals": 0
+        }
+      ],
+      "c21Checks": [
+        "asm-entra-files-kerberos-ready",
+        "asm-files-smb-gcm",
+        "asm-intune-fslogix-catalog-profile"
+      ],
+      "probeId": "probe-fsx-storage-kerberos",
+      "citations": [
+        {
+          "id": "obs:fslogix-entra-kerberos-aes-128-gcm",
+          "source": "avd-landing-zone:docs/knowledge/lessons/0028-azure-files-entra-kerberos-aes-128-gcm.md",
+          "claim": "Entra Kerberos on Azure Files is refused with 0xC0000022 at SMB SESSION_SETUP when channel encryption is AES-256-GCM only; enabling AES-128-GCM;AES-256-GCM (CCM off) resolves it (avd-landing-zone lesson 0028)."
+        },
+        {
+          "id": "ref:review-checklists-avd#D02.01",
+          "source": "avd-assess:methods/entra.md",
+          "claim": "Cloud-native Entra-joined session hosts mounting Azure Files require Entra Kerberos enabled on the storage account, a Kerberos key generated, and Graph User.Read consented."
+        },
+        {
+          "id": "obs:fslogix-cloud-kerberos-roamidentity",
+          "source": "avd-second-brain:docs/knowledge/storage/fslogix-entra-kerberos.md",
+          "claim": "CloudKerberosTicketRetrievalEnabled must be set to 1 alongside the storage account service principal consent."
+        }
+      ],
+      "remediation": {
+        "plane": "entra",
+        "kind": "lz-setting",
+        "name": "entra-kerberos-consent",
+        "costEstimate": "$0.00 (SMB channelEncryption AES-128-GCM;AES-256-GCM + Entra service principal consent)",
+        "blastRadius": "FSLogix storage account SMB settings, service principal, and pool user security group.",
+        "actionSummary": "Ensure Azure Files SMB channel encryption includes AES-128-GCM;AES-256-GCM, grant admin consent for User.Read on the storage service principal, and verify SMB share RBAC.",
+        "rollbackSummary": "Revert SMB channelEncryption or service principal changes recorded in rollback snapshot.",
+        "c24Change": {
+          "kind": "lz-setting",
+          "plane": "entra",
+          "name": "entra-kerberos-consent"
+        },
+        "lzStage": {
+          "stage": 1,
+          "repo": "avd-ops/avd-entra",
+          "deployEntrypoint": "scripts/Deploy-AvdEntra.ps1",
+          "manifest": "entra-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes entra,azure -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-logon-checkpoints-p95-24h.kql"
+      }
+    },
+    {
+      "id": "pb-fsx-vhdx-locked-session",
+      "domain": "fslogix",
+      "plane": "intune",
+      "pillar": "reliability",
+      "severity": "medium",
+      "title": "FSLogix loads a temporary profile due to an orphaned VHDX lock (Event 26)",
+      "bottomLine": "A disconnected session on another host still holds an exclusive SMB lock on the user's VHDX because idle/disconnected session time limits are not enforced.",
+      "keywords": [
+        "temporary profile",
+        "temp profile",
+        "vhdx locked",
+        "event 26",
+        "reason 5",
+        "locked",
+        "handle",
+        "orphaned session"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.intune.sessionTimeLimitsConfigured",
+          "equals": false
+        }
+      ],
+      "c21Checks": [
+        "asm-intune-session-limits",
+        "asm-intune-fslogix-catalog-profile"
+      ],
+      "probeId": "probe-fsx-open-handles",
+      "citations": [
+        {
+          "id": "ref:intune-avd-multisession#settings-catalog-only",
+          "source": "avd-assess:methods/intune.md",
+          "claim": "Enforcing disconnected session time limits prevents abandoned sessions from holding VHDX locks across host pools."
+        }
+      ],
+      "remediation": {
+        "plane": "intune",
+        "kind": "lz-setting",
+        "name": "intune-session-time-limits",
+        "costEstimate": "$0.00 (disconnects stale session and configures Intune session time limits)",
+        "blastRadius": "Logs off the single stale disconnected session holding the VHDX lock and sets idle/disconnect policy.",
+        "actionSummary": "Log off the stale disconnected user session and apply the Intune Settings Catalog session time limits policy.",
+        "rollbackSummary": "Restore previous Settings Catalog policy assignment.",
+        "c24Change": {
+          "kind": "lz-setting",
+          "plane": "intune",
+          "name": "intune-session-time-limits"
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-intune",
+          "deployEntrypoint": "scripts/Deploy-AvdIntune.ps1",
+          "manifest": "intune-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes intune -DryRun"
+        },
+        "swarmAction": "host.recycle-empty",
+        "swarmKql": "wvd-logon-checkpoints-p95-24h.kql"
+      }
+    },
+    {
+      "id": "pb-fsx-storage-throttling",
+      "domain": "fslogix",
+      "plane": "m365",
+      "pillar": "performance",
+      "severity": "medium",
+      "title": "Slow logon (>45s) from Azure Files IOPS throttling and Outlook cache bloat",
+      "bottomLine": "FSLogix profile containers are hitting Azure Files IOPS/bandwidth ceilings during logon storms, compounded by unthrottled Outlook cached mode.",
+      "keywords": [
+        "slow logon",
+        "logon storm",
+        "iops",
+        "throttling",
+        "latency",
+        "shellready",
+        "loadprofile",
+        "outlook",
+        "ost"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.m365.outlookCachedModeConfigured",
+          "equals": false
+        }
+      ],
+      "c21Checks": [
+        "asm-m365-outlook-cache",
+        "asm-files-smb-multichannel",
+        "asm-insights-time-to-connect"
+      ],
+      "probeId": "probe-fsx-storage-latency",
+      "citations": [
+        {
+          "id": "ref:review-checklists-avd#H01.02",
+          "source": "avd-assess:methods/m365.md",
+          "claim": "Tuning Outlook cached Exchange sync windows and enabling Premium Azure Files burst/provisioned IOPS with SMB Multichannel prevents logon storm stalls."
+        }
+      ],
+      "remediation": {
+        "plane": "m365",
+        "kind": "lz-parameter",
+        "name": "enableOutlookCachedModeTuning",
+        "costEstimate": "$0.00 for M365 policy tuning (scaling Azure Files quota requires `go batch <id> $<total>`)",
+        "blastRadius": "M365 Apps Outlook profile sync window policy on multi-session hosts.",
+        "actionSummary": "Apply the M365 Outlook cached mode sync window baseline via Intune Settings Catalog.",
+        "rollbackSummary": "Revert Settings Catalog policy to previous revision.",
+        "c24Change": {
+          "kind": "lz-parameter",
+          "plane": "m365",
+          "name": "enableOutlookCachedModeTuning",
+          "to": true
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-m365",
+          "deployEntrypoint": "scripts/Deploy-AvdM365.ps1",
+          "manifest": "m365-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes m365 -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-logon-checkpoints-p95-24h.kql"
+      }
+    },
+    {
+      "id": "pb-host-unhealthy-agent",
+      "domain": "hosts",
+      "plane": "azure",
+      "pillar": "reliability",
+      "severity": "high",
+      "title": "Session host status Unavailable or NeedsAssistance (HealthCheck failure)",
+      "bottomLine": "One or more session hosts failed an RDAgent health check (DomainJoinCheck, SxSStackListenerCheck, or UrlsAccessibleCheck) and cannot accept connections.",
+      "keywords": [
+        "unavailable",
+        "needsassistance",
+        "rdagent",
+        "healthcheck",
+        "domainjoincheck",
+        "sxsstack",
+        "urlsaccessible",
+        "heartbeat"
+      ],
+      "c11Triggers": [],
+      "c21Checks": [
+        "asm-host-agent-health",
+        "asm-pooled-host-redundancy"
+      ],
+      "probeId": "probe-host-health-checks",
+      "citations": [
+        {
+          "id": "ref:waf-reliability-checklist#RE:05",
+          "source": "avd-assess:methods/reliability.md",
+          "claim": "Session host health check codes identify whether failure is Entra/domain join, SxS listener, or outbound broker reachability."
+        }
+      ],
+      "remediation": {
+        "plane": "azure",
+        "kind": "day2-runbook",
+        "name": "repair-session-host-agent",
+        "costEstimate": "$0.00 (drains host and restarts Remote Desktop Agent Loader service)",
+        "blastRadius": "Target unhealthy session host only (placed in drain mode first).",
+        "actionSummary": "Place unhealthy session host in drain mode, restart RDAgentBootLoader via Azure VM RunCommand, and re-verify Status == Available.",
+        "rollbackSummary": "Keep host in drain mode for image redeploy if health check remains failed.",
+        "c24Change": {
+          "kind": "manual",
+          "plane": "azure",
+          "code": "rebuild-hosts"
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-azure",
+          "deployEntrypoint": "scripts/deploy/deploy.sh",
+          "manifest": "azure-outputs.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes azure -DryRun"
+        },
+        "swarmAction": "host.restart-agent",
+        "swarmKql": "wvd-agent-health-latest-7d.kql"
+      }
+    },
+    {
+      "id": "pb-host-drain-capacity-exhausted",
+      "domain": "hosts",
+      "plane": "azure",
+      "pillar": "reliability",
+      "severity": "high",
+      "title": "NoAvailableSessionHost error from hosts stuck in drain mode or maxSessionLimit reached",
+      "bottomLine": "All running session hosts are either at maxSessionLimit or left in drain mode (allowNewSession: false).",
+      "keywords": [
+        "noavailablesessionhost",
+        "drain mode",
+        "allownewsession",
+        "capacity",
+        "maxsessionlimit",
+        "scaling plan",
+        "full"
+      ],
+      "c11Triggers": [],
+      "c21Checks": [
+        "asm-host-pool-capacity",
+        "asm-pooled-autoscale-attached"
+      ],
+      "probeId": "probe-host-pool-capacity",
+      "citations": [
+        {
+          "id": "ref:avd-autoscale#scales-to-save-cost",
+          "source": "avd-assess:methods/reliability.md",
+          "claim": "Hosts left with allowNewSession=false after maintenance are excluded from load balancing and autoscale ramp-up."
+        }
+      ],
+      "remediation": {
+        "plane": "azure",
+        "kind": "day2-runbook",
+        "name": "clear-stale-drain-mode",
+        "costEstimate": "$0.00 (clears allowNewSession=false on healthy hosts; starting deallocated VMs requires `go batch <id> $<total>`)",
+        "blastRadius": "Healthy session hosts currently set to allowNewSession=false.",
+        "actionSummary": "Enable allowNewSession on healthy hosts that passed all health checks.",
+        "rollbackSummary": "Restore allowNewSession=false on the hosts listed in the rollback snapshot.",
+        "c24Change": {
+          "kind": "lz-setting",
+          "plane": "azure",
+          "name": "hostpool-scaling-plan"
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-azure",
+          "deployEntrypoint": "scripts/deploy/deploy.sh",
+          "manifest": "azure-outputs.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes azure -DryRun"
+        },
+        "swarmAction": "host.resume",
+        "swarmKql": "wvd-agent-health-latest-7d.kql"
+      }
+    },
+    {
+      "id": "pb-host-cpu-ram-contention",
+      "domain": "hosts",
+      "plane": "m365",
+      "pillar": "performance",
+      "severity": "medium",
+      "title": "High CPU or memory contention across multi-session hosts",
+      "bottomLine": "Session hosts are experiencing sustained CPU (>85%) or low available memory due to unoptimized Teams/OneDrive processes or high session density.",
+      "keywords": [
+        "high cpu",
+        "memory",
+        "ram",
+        "lag",
+        "slow",
+        "freeze",
+        "contention",
+        "disk queue",
+        "density"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.m365.teamsMediaOptimizationState",
+          "equals": "disabled"
+        }
+      ],
+      "c21Checks": [
+        "asm-m365-teams-vdi-optimization",
+        "asm-insights-input-delay-target"
+      ],
+      "probeId": "probe-host-perf-counters",
+      "citations": [
+        {
+          "id": "ref:teams-on-avd#media-optimization",
+          "source": "avd-assess:methods/performance.md",
+          "claim": "Enabling Teams VDI SlimCore/WebRTC offload and capping maxSessionLimit to SKU benchmarks prevents multi-session CPU saturation."
+        },
+        {
+          "id": "ref:avd-insights-use-cases#input-delay-host-100",
+          "source": "avd-assess:methods/performance.md",
+          "claim": "Sustained p95 user input delay above 100 ms or CPU above the 80% target utilization ceiling requires lowering maxSessionLimit or enabling media offload."
+        }
+      ],
+      "remediation": {
+        "plane": "m365",
+        "kind": "lz-parameter",
+        "name": "enableTeamsVdiOptimization",
+        "costEstimate": "$0.00 (policy & maxSessionLimit tuning)",
+        "blastRadius": "Host pool maxSessionLimit and Teams VDI media offload policy.",
+        "actionSummary": "Enable Teams VDI media offload policy and align host pool maxSessionLimit with the validated SKU threshold.",
+        "rollbackSummary": "Restore previous maxSessionLimit and policy state.",
+        "c24Change": {
+          "kind": "lz-parameter",
+          "plane": "m365",
+          "name": "enableTeamsVdiOptimization",
+          "to": true
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-m365",
+          "deployEntrypoint": "scripts/Deploy-AvdM365.ps1",
+          "manifest": "m365-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes m365,azure -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-logon-checkpoints-p95-24h.kql"
+      }
+    },
+    {
+      "id": "pb-id-ca-blocks-avd-sso",
+      "domain": "identity-m365",
+      "plane": "entra",
+      "pillar": "security",
+      "severity": "high",
+      "title": "Entra SSO sign-in loop or Conditional Access device compliance block (AADSTS53000)",
+      "bottomLine": "Entra Single Sign-On (`enablerdsaadauth:i:1`) is disabled on the host pool or a Conditional Access policy requires device compliance while session hosts are noncompliant.",
+      "keywords": [
+        "aadsts53000",
+        "aadsts50005",
+        "sso",
+        "enablerdsaadauth",
+        "conditional access",
+        "sign-in loop",
+        "double prompt",
+        "mfa",
+        "compliant device"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.hostPool.entraSso",
+          "equals": "disabled"
+        },
+        {
+          "path": "c11.hostPool.sessionHosts.intuneNoncompliant",
+          "gt": 0
+        }
+      ],
+      "c21Checks": [
+        "asm-entra-sso-enabled",
+        "asm-entra-ca-avd-mfa",
+        "asm-intune-hosts-compliant",
+        "asm-entra-ca-break-glass-excluded"
+      ],
+      "probeId": "probe-id-ca-sso-posture",
+      "citations": [
+        {
+          "id": "ref:avd-sso#host-pool-property",
+          "source": "avd-assess:methods/entra.md",
+          "claim": "Entra-joined host pools require enablerdsaadauth:i:1 and Conditional Access policies scoped to AVD app IDs with break-glass exclusions."
+        },
+        {
+          "id": "ref:review-checklists-avd#G04.01",
+          "source": "avd-assess:methods/entra.md",
+          "claim": "AVD Conditional Access policies must enforce MFA while excluding break-glass accounts and aligning with host compliance state."
+        }
+      ],
+      "remediation": {
+        "plane": "entra",
+        "kind": "lz-parameter",
+        "name": "enableEntraSso",
+        "costEstimate": "$0.00 (host pool RDP property & CA reportOnly/compliance alignment)",
+        "blastRadius": "Host pool customRdpProperty and AVD Conditional Access policy.",
+        "actionSummary": "Enable enablerdsaadauth:i:1 on the host pool and ensure AVD Conditional Access excludes break-glass accounts and matches Intune compliance state.",
+        "rollbackSummary": "Restore previous customRdpProperty string from rollback snapshot.",
+        "c24Change": {
+          "kind": "lz-parameter",
+          "plane": "entra",
+          "name": "enableEntraSso",
+          "to": true
+        },
+        "lzStage": {
+          "stage": 1,
+          "repo": "avd-ops/avd-entra",
+          "deployEntrypoint": "scripts/Deploy-AvdEntra.ps1",
+          "manifest": "entra-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes entra,azure -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-signins-without-ca-24h.kql"
+      }
+    },
+    {
+      "id": "pb-id-intune-catalog-drift",
+      "domain": "identity-m365",
+      "plane": "intune",
+      "pillar": "operations",
+      "severity": "medium",
+      "title": "Intune Settings Catalog profile errors or un-enrolled multi-session hosts",
+      "bottomLine": "Session hosts are missing MDM enrollment (`mdmId`), failing Settings Catalog profile application, or marked noncompliant by `secureByDefault`.",
+      "keywords": [
+        "intune",
+        "settings catalog",
+        "mdm",
+        "noncompliant",
+        "compliance",
+        "sync stale",
+        "config error",
+        "enrollment"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.hostPool.sessionHosts.intuneConfigErrors",
+          "gt": 0
+        },
+        {
+          "path": "c11.intune.multiSessionCatalogProfiles",
+          "equals": 0
+        }
+      ],
+      "c21Checks": [
+        "asm-intune-hosts-managed",
+        "asm-intune-hosts-compliant",
+        "asm-intune-secure-by-default",
+        "asm-intune-fslogix-catalog-profile"
+      ],
+      "probeId": "probe-id-intune-device-states",
+      "citations": [
+        {
+          "id": "ref:intune-avd-multisession#enrollment-prerequisites",
+          "source": "avd-assess:methods/intune.md",
+          "claim": "Windows Enterprise multi-session hosts must enroll via AADLoginForWindows with mdmId and receive Settings Catalog policies scoped to windowsEnterpriseMultiSession."
+        }
+      ],
+      "remediation": {
+        "plane": "intune",
+        "kind": "lz-setting",
+        "name": "intune-settings-catalog-fslogix",
+        "costEstimate": "$0.00 (Intune policy assignment & device sync trigger)",
+        "blastRadius": "Dynamic session-host device group in Intune.",
+        "actionSummary": "Assign the multi-session Settings Catalog baseline and compliance policy to the dynamic session-host group and trigger an Intune device sync.",
+        "rollbackSummary": "Restore previous group assignment on the Settings Catalog profile.",
+        "c24Change": {
+          "kind": "lz-setting",
+          "plane": "intune",
+          "name": "intune-settings-catalog-fslogix"
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-intune",
+          "deployEntrypoint": "scripts/Deploy-AvdIntune.ps1",
+          "manifest": "intune-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes intune -DryRun"
+        },
+        "swarmAction": "host.reregister",
+        "swarmKql": "wvd-agent-health-latest-7d.kql"
+      }
+    },
+    {
+      "id": "pb-m365-teams-onedrive-vdi",
+      "domain": "identity-m365",
+      "plane": "m365",
+      "pillar": "reliability",
+      "severity": "high",
+      "title": "Missing M365 Shared Computer Activation, OneDrive KFM, or Teams VDI optimization",
+      "bottomLine": "Users hit M365 licensing prompts or unredirected local Desktop/Documents folders because Shared Computer Activation and OneDrive Known Folder Move are not enforced.",
+      "keywords": [
+        "onedrive",
+        "kfm",
+        "known folder move",
+        "shared computer activation",
+        "sca",
+        "sharedcomputerlicensing",
+        "teams vdi",
+        "slimcore",
+        "webrtc",
+        "mmr"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.m365.m365AppsSharedComputerActivation",
+          "equals": false
+        },
+        {
+          "path": "c11.m365.oneDriveKfmState",
+          "equals": "none"
+        }
+      ],
+      "c21Checks": [
+        "asm-m365-onedrive-kfm",
+        "asm-m365-shared-computer-activation",
+        "asm-m365-teams-vdi-optimization"
+      ],
+      "probeId": "probe-m365-vdi-policies",
+      "citations": [
+        {
+          "id": "ref:onedrive-vdi#silent-config-and-kfm",
+          "source": "avd-assess:methods/m365.md",
+          "claim": "Multi-session estates require SharedComputerLicensing=1, OneDrive SilentAccountConfig + KFM, and Teams VDI media optimization."
+        },
+        {
+          "id": "ref:review-checklists-avd#B01.09",
+          "source": "avd-assess:methods/m365.md",
+          "claim": "Microsoft 365 Apps on shared session hosts require Shared Computer Activation enabled."
+        }
+      ],
+      "remediation": {
+        "plane": "m365",
+        "kind": "lz-parameter",
+        "name": "enableSharedComputerActivation",
+        "costEstimate": "$0.00 (M365 Settings Catalog baseline deployment)",
+        "blastRadius": "M365 Apps, OneDrive, and Teams VDI policy profiles assigned to the AVD host group.",
+        "actionSummary": "Enable Shared Computer Activation, OneDrive Silent Account Configuration + KFM, and Teams VDI optimization in the M365 control-plane slice.",
+        "rollbackSummary": "Remove or revert the M365 Settings Catalog profile assignments.",
+        "c24Change": {
+          "kind": "lz-parameter",
+          "plane": "m365",
+          "name": "enableSharedComputerActivation",
+          "to": true
+        },
+        "lzStage": {
+          "stage": 2,
+          "repo": "avd-ops/avd-m365",
+          "deployEntrypoint": "scripts/Deploy-AvdM365.ps1",
+          "manifest": "m365-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes m365 -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-control-plane-changes-7d.kql"
+      }
+    },
+    {
+      "id": "pb-cp-stage-handoff-drift",
+      "domain": "control-planes",
+      "plane": "azure",
+      "pillar": "operations",
+      "severity": "high",
+      "title": "Multi-plane stage handoff drift across Entra, Intune, M365, Azure, and Power Platform",
+      "bottomLine": "One or more stage handoff manifests in the companion estate vault (`entra-manifest.json`, `intune-manifest.json`, `m365-manifest.json`, `azure-outputs.json`, `power-platform-manifest.json`) drifted from live tenant state.",
+      "keywords": [
+        "handoff",
+        "manifest",
+        "drift",
+        "stage",
+        "entra-manifest",
+        "intune-manifest",
+        "m365-manifest",
+        "azure-outputs",
+        "postdeployment",
+        "validator"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.hostPool.directUserAssignments",
+          "gt": 0
+        }
+      ],
+      "c21Checks": [
+        "asm-entra-no-direct-user-rbac",
+        "asm-entra-ca-break-glass-excluded"
+      ],
+      "probeId": "probe-cp-manifest-verify",
+      "citations": [
+        {
+          "id": "ref:review-checklists-avd#D01.06",
+          "source": "avd-ops:docs/five-plane-assess-current-state-spec.md",
+          "claim": "Invoke-AvdControlPlanes.ps1 and avd-current-state verify live state against the five stage handoff manifests and group-only RBAC."
+        }
+      ],
+      "remediation": {
+        "plane": "entra",
+        "kind": "lz-setting",
+        "name": "entra-group-rbac-only",
+        "costEstimate": "$0.00 (reconciles control-plane settings via C24 remediation plan)",
+        "blastRadius": "Drifted control-plane resources identified in C24 plan.",
+        "actionSummary": "Export the plane-grouped C24 remediation plan and re-run the affected control-plane stage in avd-landing-zone.",
+        "rollbackSummary": "Restore previous manifest parameters from the companion vault run journal.",
+        "c24Change": {
+          "kind": "lz-setting",
+          "plane": "entra",
+          "name": "entra-group-rbac-only"
+        },
+        "lzStage": {
+          "stage": 1,
+          "repo": "avd-ops/avd-entra",
+          "deployEntrypoint": "scripts/Deploy-AvdEntra.ps1",
+          "manifest": "entra-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes entra,intune,m365,azure,power-platform -DryRun"
+        },
+        "swarmAction": "host.drain",
+        "swarmKql": "wvd-control-plane-changes-7d.kql"
+      }
+    },
+    {
+      "id": "pb-cp-power-platform-dlp-vnet",
+      "domain": "control-planes",
+      "plane": "power-platform",
+      "pillar": "security",
+      "severity": "high",
+      "title": "Power Platform day-2 workflow suspended or missing strict DLP and VNet injection",
+      "bottomLine": "AVD day-2 Power Automate workflows are either running in an unisolated environment without a strict DLP policy or missing VNet enterprise policy subnet delegation.",
+      "keywords": [
+        "power platform",
+        "power automate",
+        "dlp",
+        "enterprise policy",
+        "vnet injection",
+        "day-2",
+        "flow suspended",
+        "environment"
+      ],
+      "c11Triggers": [
+        {
+          "path": "c11.powerPlatform.dlpPoliciesCoveringAvdEnv",
+          "equals": 0
+        },
+        {
+          "path": "c11.powerPlatform.enterprisePoliciesCount",
+          "equals": 0
+        }
+      ],
+      "c21Checks": [
+        "asm-pp-dedicated-environment",
+        "asm-pp-dlp-blocks-unapproved",
+        "asm-pp-vnet-enterprise-policy"
+      ],
+      "probeId": "probe-cp-power-platform-health",
+      "citations": [
+        {
+          "id": "ref:power-platform-dlp#default-group-blocked",
+          "source": "avd-assess:methods/power-platform.md",
+          "claim": "Production AVD day-2 workflows must run in a dedicated environment guarded by a strict DLP policy and VNet enterprise policy."
+        },
+        {
+          "id": "ref:power-platform-vnet#enterprise-policy-subnet",
+          "source": "avd-assess:methods/power-platform.md",
+          "claim": "Power Platform environments executing AVD operations require subnet-delegated VNet enterprise policy egress."
+        }
+      ],
+      "remediation": {
+        "plane": "power-platform",
+        "kind": "lz-setting",
+        "name": "power-platform-strict-dlp",
+        "costEstimate": "$0.00 (DLP policy and enterprise policy configuration)",
+        "blastRadius": "Dedicated AVD Power Platform environment connector classifications.",
+        "actionSummary": "Apply the strict DLP policy (`Default` group `Blocked`) and link the `Microsoft.PowerPlatform/enterprisePolicies` resource to the delegated subnet.",
+        "rollbackSummary": "Restore previous DLP connector classification from rollback snapshot.",
+        "c24Change": {
+          "kind": "lz-setting",
+          "plane": "power-platform",
+          "name": "power-platform-strict-dlp"
+        },
+        "lzStage": {
+          "stage": 3,
+          "repo": "avd-ops/avd-power-platform",
+          "deployEntrypoint": "scripts/Deploy-AvdPowerPlatform.ps1",
+          "manifest": "power-platform-manifest.json",
+          "orchestratorCommand": "./scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes power-platform -DryRun"
+        },
+        "swarmAction": "host.stop",
+        "swarmKql": "wvd-control-plane-changes-7d.kql"
+      }
+    }
+  ]
+}
