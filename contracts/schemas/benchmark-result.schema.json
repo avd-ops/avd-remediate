@@ -1,0 +1,296 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assess.avd-ops.dev/schemas/avd-benchmark-result/v1.json",
+  "title": "avd-benchmark-result/v1: a redacted, reproducible AVD benchmark result",
+  "description": "Contract C25. Produced by avd-benchmark (Tier 1 active synthetic and control-plane profiles) or avd-current-state (Tier 2 read-only observational telemetry profiles) and checked by scripts/check_evidence.py. Every environment field is a closed enum, public Azure SKU, or banded sample size; metrics hold aggregate percentiles only, never per-user or per-timestamp series.",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "date",
+    "source",
+    "tier",
+    "profile",
+    "environment",
+    "metrics",
+    "verdict"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "p10": { "type": "number" },
+        "p50": { "type": "number" },
+        "p90": { "type": "number" },
+        "p95": { "type": "number" },
+        "p99": { "type": "number" },
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    },
+    "sampleBand": {
+      "enum": ["1-2", "3-9", "10-25", "26-100", "100+"],
+      "description": "Banded sample count so an estate's exact host or session count cannot fingerprint the organization."
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema": {
+      "const": "avd-benchmark-result/v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^bm-[0-9]{8}-[a-z0-9-]{3,64}$",
+      "description": "bm-YYYYMMDD-<slug>; also the file stem. Never names an estate, customer, or person."
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "source": {
+      "enum": ["sandbox", "lab", "estate"],
+      "description": "sandbox: disposable test batch; lab: standing non-production environment; estate: real estate, aggregated, with owner consent."
+    },
+    "consent": {
+      "type": "boolean",
+      "description": "Required true when source is estate: the owner agreed to share these redacted aggregates."
+    },
+    "tier": {
+      "enum": ["synthetic", "observational"],
+      "description": "synthetic: active Tier 1 harness run (avd-benchmark); observational: passive Tier 2 KQL telemetry export (avd-current-state)."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Optional upstream data, keyed by namespace; readers ignore what they don't know (contracts/README.md rule 1)."
+    },
+    "profile": {
+      "type": "object",
+      "required": ["id", "version", "assessCommit"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "enum": [
+            "storage-fslogix-io",
+            "host-logon-storm",
+            "multisession-density",
+            "control-plane-autoscale",
+            "bcdr-profile-recovery",
+            "insights-observational"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "workloadClass": {
+          "enum": ["light", "medium", "heavy", "power"]
+        },
+        "assessCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "benchmarkCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "vmSku",
+        "vcpu",
+        "memoryGiB",
+        "osDiskType",
+        "joinType",
+        "sampleHostsBand",
+        "sampleSessionsBand",
+        "windowHours"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "vmSku": {
+          "type": "string",
+          "pattern": "^Standard_[A-Za-z0-9_]{1,40}$"
+        },
+        "vcpu": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        },
+        "memoryGiB": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "osDiskType": {
+          "enum": [
+            "Premium_LRS",
+            "Premium_ZRS",
+            "PremiumV2_LRS",
+            "StandardSSD_LRS",
+            "StandardSSD_ZRS",
+            "Standard_LRS",
+            "Ephemeral"
+          ]
+        },
+        "ephemeralOsDisk": {
+          "type": "boolean"
+        },
+        "encryptionAtHost": {
+          "type": "boolean"
+        },
+        "trustedLaunch": {
+          "type": "boolean"
+        },
+        "acceleratedNetworking": {
+          "type": "boolean"
+        },
+        "osImage": {
+          "enum": [
+            "win11-24h2-avd-m365",
+            "win11-24h2-avd",
+            "win11-23h2-avd-m365",
+            "win11-23h2-avd",
+            "win10-22h2-avd",
+            "ws2025-datacenter",
+            "ws2022-datacenter",
+            "custom-optimized",
+            "custom-unoptimized"
+          ]
+        },
+        "wdotProfile": {
+          "enum": ["avd-ops-reviewed-v1", "wdot-default", "none", "other"]
+        },
+        "defenderCacheMaintained": {
+          "type": "boolean"
+        },
+        "fslogixExclusions": {
+          "enum": ["full", "partial", "none"]
+        },
+        "joinType": {
+          "enum": ["entra-joined", "hybrid-entra-joined", "ad-domain-joined"]
+        },
+        "intuneEnrolled": {
+          "type": "boolean"
+        },
+        "profileStorageSku": {
+          "enum": [
+            "Premium_ZRS",
+            "Premium_LRS",
+            "Standard_ZRS",
+            "Standard_LRS",
+            "Standard_GZRS",
+            "Standard_GRS",
+            "ANF_Standard",
+            "ANF_Premium",
+            "ANF_Ultra",
+            "none"
+          ]
+        },
+        "profileAuth": {
+          "enum": ["entra-kerberos", "ad-ds", "entra-ds", "none"]
+        },
+        "smbChannelEncryption": {
+          "enum": [
+            "AES-128-GCM+AES-256-GCM",
+            "AES-256-GCM-only",
+            "includes-CCM",
+            "default",
+            "none"
+          ]
+        },
+        "networkEgress": {
+          "enum": [
+            "nat-gateway",
+            "azure-firewall",
+            "nva",
+            "default-outbound",
+            "public-ip",
+            "private-link"
+          ]
+        },
+        "sampleHostsBand": {
+          "$ref": "#/$defs/sampleBand"
+        },
+        "sampleSessionsBand": {
+          "$ref": "#/$defs/sampleBand"
+        },
+        "windowHours": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 8784
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "sessionsPerVcpuTested": { "type": "number", "minimum": 0 },
+        "maxPassingSessionsPerVcpu": { "type": "number", "minimum": 0 },
+        "cpuPct": { "$ref": "#/$defs/distribution" },
+        "pqlPerCore": { "$ref": "#/$defs/distribution" },
+        "availableMemoryMiB": { "$ref": "#/$defs/distribution" },
+        "memoryPerSessionMiB": { "$ref": "#/$defs/distribution" },
+        "inputDelayMs": { "$ref": "#/$defs/distribution" },
+        "rttMs": { "$ref": "#/$defs/distribution" },
+        "timeToConnectMs": { "$ref": "#/$defs/distribution" },
+        "profileLoadMs": { "$ref": "#/$defs/distribution" },
+        "vhdxAttachMs": { "$ref": "#/$defs/distribution" },
+        "readIops": { "$ref": "#/$defs/distribution" },
+        "writeIops": { "$ref": "#/$defs/distribution" },
+        "readLatencyMs": { "$ref": "#/$defs/distribution" },
+        "writeLatencyMs": { "$ref": "#/$defs/distribution" },
+        "coldBootToAvailableSec": { "$ref": "#/$defs/distribution" },
+        "startOnConnectWaitSec": { "$ref": "#/$defs/distribution" },
+        "drainToDeallocateSec": { "$ref": "#/$defs/distribution" },
+        "measuredRtoMinutes": { "type": "number", "minimum": 0 },
+        "measuredRpoMinutes": { "type": "number", "minimum": 0 },
+        "backupJobSuccess": { "type": "boolean" },
+        "connectionFailureRatePct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "shortpathUdpSharePct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "turnRelaySharePct": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "required": ["experienceGate", "claims"],
+      "additionalProperties": false,
+      "properties": {
+        "experienceGate": {
+          "enum": ["pass", "warn", "fail"]
+        },
+        "claims": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["claim", "verdict"],
+            "additionalProperties": false,
+            "properties": {
+              "claim": {
+                "type": "string",
+                "pattern": "^(ref|gap):[A-Za-z0-9._:#-]+$"
+              },
+              "observation": {
+                "type": "string",
+                "pattern": "^obs:[a-z0-9][a-z0-9-]{1,63}$"
+              },
+              "verdict": {
+                "enum": ["agrees", "extends", "disagrees", "not-yet-tested"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "$comment": "The engine files are classic scripts, CommonJS in Node (docs/portal-engine-spec.md, section 6). A portal whose package.json says type module keeps this file beside its copy.",
+  "type": "commonjs"
+}

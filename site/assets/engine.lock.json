@@ -1,0 +1,12 @@
+{
+  "tag": "pe-v1.1.0",
+  "commit": "0933f79ee2ac777324a95e9eee63b7b7c0565093",
+  "files": {
+    "core.js": "e373ffc7aeeb0fd04cb77f6729568985fd13156bff4d0232d668c70cebeb9cc6",
+    "blocks.js": "8ef0702e3a283b1266e9501fc2f667980ad9d93d6fb3ba979a6881003bb08daa",
+    "runin.js": "fb62a8ccb0e658ff9b2342357a79b4d28eadda98eedfc78a4d110db494a38916",
+    "statelines.js": "0faaf20d3cfa3dc53e2fd7e6186cc33a9e0b394503cfc9053b8b08480a4e4146",
+    "bands.js": "5fe16cf0f27b8d91a19f0b7ce20a5a6d0a265ff57714af524017ffdce87859a1",
+    "redact.js": "930a683813fa5861e8a86d758822aaf4f7d072580e77956bd79d921da556083f"
+  }
+}

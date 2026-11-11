@@ -1,0 +1,65 @@
+{
+  "schema": "avd-contract-pins/v1",
+  "consumer": "avd-remediate",
+  "sources": {
+    "avd-assess": {
+      "repository": "https://github.com/avd-ops/avd-assess",
+      "commit": "93d6474e99045ef7dbed82eb059ae9504e6e2b65",
+      "files": {
+        "contracts/fact-register.json": "23f8fa464c3bde50cb0c7fed76cb2a9677169c1201cb0f92c6c70b5409fdcd6e",
+        "contracts/schemas/remediation-plan.schema.json": "e6eac145014877abffe652d9373972427d64d24f346b27dd37a711e98fba6ed7",
+        "contracts/schemas/benchmark-result.schema.json": "1d7967b2c4dac6306acc250e45dc3be3ed4e9ae6df9387aa591fef59e84fe8ed",
+        "contracts/schemas/measured-usage.schema.json": "b8aa9dea2e7c8907dbf91485673a51befb7e6ac2335b8fd7053ae9395bd5fcee",
+        "contracts/schemas/current-state-facts.schema.json": "718eab774acc4fa6cf9aca50636b3226808b8bd304afd85081527241bce570e6",
+        "contracts/schemas/assessment.schema.json": "6597b9a08e0db64c79e091713194af7a27bbd79015071507fa1df8b8bea736e3"
+      }
+    },
+    "avd-second-brain": {
+      "repository": "https://github.com/avd-ops/avd-second-brain",
+      "commit": "26e40d8e1346c617ab0659f97a05603399f7db41",
+      "files": {
+        "contracts/calibration.json": "475794e573dd8b8c46e9af875a4027047885a76b1e9788dad76bf20222a84407",
+        "contracts/workload-tiers.json": "f3255688ca864b43a025638ee92d147a70946ac4a3e49e619a56c366981453c7"
+      }
+    },
+    "avd-landing-zone": {
+      "repository": "https://github.com/avd-ops/avd-landing-zone",
+      "commit": "2c808222df9874a7fc26902594d800a2da8900e3",
+      "files": {
+        "contracts/control-planes.json": "cf321d1c98ea575e8d968fd66651b552d6338173b4df6c2ef19acb5d40bc1c63"
+      }
+    },
+    "avd-current-state": {
+      "repository": "https://github.com/avd-ops/avd-current-state",
+      "commit": "78e4fda17b63afd492b444758e523c1fc476e394",
+      "files": {
+        "contracts/lz-parameters.json": "33bbf3ccdd17b6463b17395eeb550629c267e83bc40b030b3b135e29850b3a0f"
+      }
+    },
+    "avd-swarm": {
+      "repository": "https://github.com/avd-ops/avd-swarm",
+      "commit": "b8378574df59fee914a927526d5cb2a37121a05d",
+      "actions": [
+        "host.drain",
+        "host.restart-agent",
+        "host.reregister",
+        "host.recycle-empty",
+        "host.resume",
+        "host.stop"
+      ],
+      "kql": [
+        "wvd-connection-transport-rtt-24h.kql",
+        "wvd-connection-errors-last-24h.kql",
+        "wvd-agent-health-latest-7d.kql",
+        "wvd-logon-checkpoints-p95-24h.kql",
+        "wvd-signins-without-ca-24h.kql",
+        "wvd-control-plane-changes-7d.kql"
+      ]
+    },
+    "avd-benchmark": {
+      "repository": "https://github.com/avd-ops/avd-benchmark",
+      "commit": "44fd1582f14861002183cdf9787fe4ff64297580",
+      "contract": "avd-benchmark-result/v1"
+    }
+  }
+}

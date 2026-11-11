@@ -1,0 +1,139 @@
+{
+  "version": "1.0.0",
+  "description": "Read-only diagnostic probe allowlist for avd-remediate. Only GET, KQL project/summarize, Get-*, and Test-* calls are permitted.",
+  "forbiddenTokenScopes": [
+    "ReadWrite",
+    "Write",
+    "Manage",
+    "FullControl",
+    "Directory.AccessAsUser.All"
+  ],
+  "probes": {
+    "probe-conn-shortpath-transport": {
+      "plane": "azure",
+      "domain": "connectivity",
+      "transport": "log-analytics-kql",
+      "method": "GET",
+      "command": "az monitor log-analytics query",
+      "kqlTables": ["WVDConnectionNetworkData", "WVDConnections"],
+      "facts": ["c11.intune.rdpShortpathConfigured"]
+    },
+    "probe-conn-black-screen-events": {
+      "plane": "azure",
+      "domain": "connectivity",
+      "transport": "log-analytics-kql",
+      "method": "GET",
+      "command": "az monitor log-analytics query",
+      "kqlTables": ["WVDCheckpoints", "WVDErrors", "Event"],
+      "facts": ["c11.hostPool.sessionHosts.entraJoined"]
+    },
+    "probe-conn-private-dns": {
+      "plane": "azure",
+      "domain": "connectivity",
+      "transport": "resource-graph",
+      "method": "GET",
+      "command": "az graph query",
+      "uriPattern": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources",
+      "facts": ["c11.network.privateEndpoints"]
+    },
+    "probe-fsx-storage-kerberos": {
+      "plane": "entra",
+      "domain": "fslogix",
+      "transport": "graph-rest",
+      "method": "GET",
+      "command": "az rest --method get",
+      "uriPattern": "https://graph.microsoft.com/v1.0/servicePrincipals",
+      "facts": ["c11.entra.kerberosStoragePrincipalsReady", "c11.intune.fslogixProfileConfigured"]
+    },
+    "probe-fsx-open-handles": {
+      "plane": "azure",
+      "domain": "fslogix",
+      "transport": "log-analytics-kql",
+      "method": "GET",
+      "command": "az monitor log-analytics query",
+      "kqlTables": ["WVDConnections", "StorageFileLogs"],
+      "facts": ["c11.intune.sessionTimeLimitsConfigured"]
+    },
+    "probe-fsx-storage-latency": {
+      "plane": "azure",
+      "domain": "fslogix",
+      "transport": "arm-rest",
+      "method": "GET",
+      "command": "az monitor metrics list",
+      "uriPattern": "https://management.azure.com/subscriptions/*/providers/Microsoft.Insights/metrics",
+      "facts": ["c11.m365.outlookCachedModeConfigured"]
+    },
+    "probe-host-health-checks": {
+      "plane": "azure",
+      "domain": "hosts",
+      "transport": "arm-rest",
+      "method": "GET",
+      "command": "az rest --method get",
+      "uriPattern": "https://management.azure.com/subscriptions/*/resourceGroups/*/providers/Microsoft.DesktopVirtualization/hostPools/*/sessionHosts",
+      "facts": ["c11.hostPool.sessionHosts.entraJoined", "c11.hostPool.sessionHosts.domainJoined"]
+    },
+    "probe-host-pool-capacity": {
+      "plane": "azure",
+      "domain": "hosts",
+      "transport": "resource-graph",
+      "method": "GET",
+      "command": "az graph query",
+      "uriPattern": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources",
+      "facts": ["c11.hostPool.maxSessionLimit"]
+    },
+    "probe-host-perf-counters": {
+      "plane": "azure",
+      "domain": "hosts",
+      "transport": "log-analytics-kql",
+      "method": "GET",
+      "command": "az monitor log-analytics query",
+      "kqlTables": ["Perf", "InsightsMetrics"],
+      "facts": ["c11.hostPool.vmSize"]
+    },
+    "probe-id-ca-sso-posture": {
+      "plane": "entra",
+      "domain": "identity-m365",
+      "transport": "graph-rest",
+      "method": "GET",
+      "command": "az rest --method get",
+      "uriPattern": "https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies",
+      "facts": ["c11.hostPool.entraSso", "c11.entra.caAvdRequiresMfa", "c11.entra.caAvdRequiresCompliantDevice", "c11.entra.caAvdBreakGlassExcluded"]
+    },
+    "probe-id-intune-device-states": {
+      "plane": "intune",
+      "domain": "identity-m365",
+      "transport": "graph-rest",
+      "method": "GET",
+      "command": "az rest --method get",
+      "uriPattern": "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices",
+      "facts": ["c11.hostPool.sessionHosts.intuneManaged", "c11.hostPool.sessionHosts.intuneNoncompliant", "c11.hostPool.sessionHosts.intuneConfigErrors", "c11.intune.multiSessionCatalogProfiles"]
+    },
+    "probe-m365-vdi-policies": {
+      "plane": "m365",
+      "domain": "identity-m365",
+      "transport": "graph-rest",
+      "method": "GET",
+      "command": "az rest --method get",
+      "uriPattern": "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies",
+      "facts": ["c11.m365.teamsMediaOptimizationState", "c11.m365.oneDriveKfmState", "c11.m365.m365AppsSharedComputerActivation"]
+    },
+    "probe-cp-manifest-verify": {
+      "plane": "azure",
+      "domain": "control-planes",
+      "transport": "resource-graph",
+      "method": "GET",
+      "command": "az graph query",
+      "uriPattern": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources",
+      "facts": ["c11.entra.userGroupsAssigned", "c11.intune.fslogixProfileConfigured"]
+    },
+    "probe-cp-power-platform-health": {
+      "plane": "power-platform",
+      "domain": "control-planes",
+      "transport": "bap-rest",
+      "method": "GET",
+      "command": "az rest --method get",
+      "uriPattern": "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/scopes/admin/environments",
+      "facts": ["c11.powerPlatform.dedicatedEnvironments", "c11.powerPlatform.dlpPoliciesCoveringAvdEnv", "c11.powerPlatform.enterprisePoliciesCount", "c11.powerPlatform.avdDay2FlowsActive"]
+    }
+  }
+}

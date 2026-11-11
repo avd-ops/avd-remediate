@@ -1,0 +1,481 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assess.avd-ops.dev/schemas/avd-current-state-facts/v1.json",
+  "title": "avd-current-state-facts/v1: a redacted current-state snapshot of one estate",
+  "description": "Contract C11. Produced offline by avd-current-state's avd_current_state_facts.ps1 from collector and validator packages; read by scripts/Import-CurrentStateFacts.ps1 into the estate's facts store, where the brain's agents read it and avd-swarm sees it only through the brain. No field holds a name, an ID, an IP address, a tag or free text: values are counts, booleans, public Azure values and keyed pseudonyms.",
+  "type": "object",
+  "required": ["schema", "estate", "generatedUtc", "producer", "sources", "subscriptions", "validations", "redactedValues"],
+  "additionalProperties": false,
+  "$defs": {
+    "utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "count": { "type": "integer", "minimum": 0 },
+    "region": { "type": "string", "pattern": "^[a-z0-9]{2,40}$" },
+    "word": { "type": "string", "pattern": "^[A-Za-z]{2,40}$" },
+    "flag": { "type": ["boolean", "null"] },
+    "redirect": { "enum": ["on", "off", "default"] },
+    "countMap": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._/+()-]{0,63}$" },
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "subscriptionId": { "type": "string", "pattern": "^sub-[0-9a-f]{8}$" },
+    "hostPoolId": { "type": "string", "pattern": "^hp-[0-9a-f]{8}$" },
+    "storageId": { "type": "string", "pattern": "^st-[0-9a-f]{8}$" },
+    "vmSize": { "type": "string", "pattern": "^Standard_[A-Za-z0-9_]{1,40}$" },
+    "imagePart": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "planeCollectionState": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": ["collected", "partial", "skipped", "unconsented"]
+        },
+        "reason": {
+          "enum": [
+            "not-selected",
+            "insufficient-scope",
+            "no-license",
+            "teams-ps-unavailable",
+            "bap-unavailable",
+            "not-applicable-intake",
+            "unsupported-in-cloud"
+          ]
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema": { "const": "avd-current-state-facts/v1" },
+    "estate": { "type": "string", "pattern": "^est-[0-9a-f]{8}$", "description": "Keyed pseudonym of the tenant" },
+    "cloud": { "enum": ["commercial", "usgov"], "description": "Cloud environment profile from C26 (default commercial)" },
+    "generatedUtc": { "$ref": "#/$defs/utc" },
+    "planesCollected": {
+      "type": "object",
+      "required": ["azure", "entra", "intune", "m365", "power-platform"],
+      "additionalProperties": false,
+      "properties": {
+        "azure": { "$ref": "#/$defs/planeCollectionState" },
+        "entra": { "$ref": "#/$defs/planeCollectionState" },
+        "intune": { "$ref": "#/$defs/planeCollectionState" },
+        "m365": { "$ref": "#/$defs/planeCollectionState" },
+        "power-platform": { "$ref": "#/$defs/planeCollectionState" }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "avd_current_state_facts.ps1" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["kind", "generatedUtc", "manifestSha256"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "enum": ["collector", "validator"] },
+          "generatedUtc": { "$ref": "#/$defs/utc" },
+          "manifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Ties the snapshot to the package in the vault without naming it" }
+        }
+      }
+    },
+    "subscriptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "collectedUtc", "regions", "counts", "hostPools", "virtualMachines", "storageAccounts", "network", "keyVaults", "logAnalytics", "policy", "roleAssignments"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/subscriptionId" },
+          "collectedUtc": { "$ref": "#/$defs/utc" },
+          "regions": { "type": "array", "items": { "$ref": "#/$defs/region" } },
+          "counts": {
+            "type": "object",
+            "propertyNames": { "pattern": "^[a-z][A-Za-z]{1,40}$" },
+            "additionalProperties": { "$ref": "#/$defs/count" }
+          },
+          "hostPools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "region", "type", "loadBalancer", "maxSessionLimit", "sessionHosts"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "$ref": "#/$defs/hostPoolId" },
+                "region": { "type": "string", "pattern": "^([a-z0-9]{2,40}|other|unknown)$" },
+                "type": { "$ref": "#/$defs/word" },
+                "loadBalancer": { "$ref": "#/$defs/word" },
+                "preferredAppGroupType": { "$ref": "#/$defs/word" },
+                "maxSessionLimit": { "type": ["integer", "null"], "minimum": 0 },
+                "validationEnvironment": { "$ref": "#/$defs/flag" },
+                "startVmOnConnect": { "$ref": "#/$defs/flag" },
+                "diagnosticsSetting": { "enum": ["all", "required", "partial", "none"] },
+                "agentUpdate": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "scheduled": { "$ref": "#/$defs/flag" }
+                  }
+                },
+                "scalingPlan": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "method": { "enum": ["power-management", "dynamic", "none"] }
+                  }
+                },
+                "insights": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "KQL-derived AVD Insights telemetry percentiles over the collection window",
+                  "properties": {
+                    "rttP50": { "type": "number", "minimum": 0 },
+                    "rttP95": { "type": "number", "minimum": 0 },
+                    "inputDelayP95": { "type": "number", "minimum": 0 },
+                    "timeToConnectP95": { "type": "number", "minimum": 0 },
+                    "fslogixReadIopsP95": { "type": "number", "minimum": 0 },
+                    "connectionFailureRate": { "type": "number", "minimum": 0, "maximum": 100 },
+                    "runningHostFloor": { "$ref": "#/$defs/count", "description": "Minimum distinct session hosts reporting heartbeats in every observed hour of the collection window" }
+                  }
+                },
+                "entraSso": { "enum": ["enabled", "disabled"] },
+                "costAllocationTag": { "$ref": "#/$defs/flag", "description": "Whether the host pool carries a cost allocation tag (such as cm-resource-parent, CostCenter, Application, Environment or Owner). Tag names and values are never copied" },
+                "directUserAssignments": { "$ref": "#/$defs/count" },
+                "intuneOrphans": { "$ref": "#/$defs/count" },
+                "rdpProperties": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9 ]{1,40}$" }, "description": "Property names only, never values" },
+                "appGroups": { "$ref": "#/$defs/countMap" },
+                "redirection": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Device redirection from the host pool's RDP properties: 'off' or 'on' when the property is set, 'default' when it isn't. Never the property's value",
+                  "properties": {
+                    "drives": { "$ref": "#/$defs/redirect" },
+                    "clipboard": { "$ref": "#/$defs/redirect" },
+                    "printers": { "$ref": "#/$defs/redirect" },
+                    "usb": { "$ref": "#/$defs/redirect" },
+                    "comPorts": { "$ref": "#/$defs/redirect" },
+                    "smartCards": { "$ref": "#/$defs/redirect" },
+                    "camera": { "$ref": "#/$defs/redirect" },
+                    "webAuthn": { "$ref": "#/$defs/redirect" }
+                  }
+                },
+                "sessionHosts": {
+                  "type": "object",
+                  "required": ["total", "status"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "total": { "$ref": "#/$defs/count" },
+                    "status": { "$ref": "#/$defs/countMap" },
+                    "allowNewSession": { "$ref": "#/$defs/count" },
+                    "assigned": { "$ref": "#/$defs/count" },
+                    "sessions": { "$ref": "#/$defs/count" },
+                    "staleHeartbeat": { "$ref": "#/$defs/count", "description": "Hosts whose last heartbeat was over 30 minutes before the collector run" },
+                    "agentVersions": { "$ref": "#/$defs/countMap" },
+                    "sxsStackVersions": { "$ref": "#/$defs/countMap" },
+                    "osVersions": { "$ref": "#/$defs/countMap" },
+                    "updateStates": { "$ref": "#/$defs/countMap" },
+                    "trustedLaunch": { "$ref": "#/$defs/count", "description": "Hosts whose VM is Trusted launch with Secure Boot and vTPM on" },
+                    "notTrustedLaunch": { "$ref": "#/$defs/count", "description": "Hosts whose VM was read and lacks Trusted launch, Secure Boot or vTPM" },
+                    "monitoringAgent": { "$ref": "#/$defs/count", "description": "Hosts with the Azure Monitor Agent extension in Succeeded state" },
+                    "insightsDcr": { "$ref": "#/$defs/count", "description": "Hosts associated with an AVD Insights data collection rule" },
+                    "acceleratedNetworking": { "$ref": "#/$defs/count", "description": "Hosts whose primary NIC has Accelerated Networking enabled" },
+                    "notAcceleratedNetworking": { "$ref": "#/$defs/count", "description": "Hosts whose primary NIC was read and has Accelerated Networking disabled" },
+                    "encryptionAtHost": { "$ref": "#/$defs/count", "description": "Hosts whose VM has encryptionAtHost enabled" },
+                    "notEncryptionAtHost": { "$ref": "#/$defs/count", "description": "Hosts whose VM was read and has encryptionAtHost disabled" },
+                    "osDiskTypes": { "$ref": "#/$defs/countMap", "description": "Hosts counted by managed OS disk storage account type" },
+                    "nonPremiumOsDisk": { "$ref": "#/$defs/count", "description": "Hosts whose OS disk is neither Premium SSD nor Ephemeral OS disk" },
+                    "zones": { "$ref": "#/$defs/count", "description": "Distinct availability zones holding session hosts in the pool" },
+                    "unpinnedZones": { "$ref": "#/$defs/count", "description": "Hosts deployed with no availability zone in a zoned region" },
+                    "backupProtected": { "$ref": "#/$defs/count", "description": "Hosts protected by Azure Backup at the VM level" },
+                    "replicated": { "$ref": "#/$defs/count", "description": "Hosts replicated by Azure Site Recovery" },
+                    "notReplicated": { "$ref": "#/$defs/count", "description": "Hosts not replicated by Azure Site Recovery" },
+                    "edrMissing": { "$ref": "#/$defs/count", "description": "Hosts flagged as unhealthy by Defender for Cloud's endpoint protection / EDR recommendation" },
+                    "vulnerabilityFindings": { "$ref": "#/$defs/count", "description": "Hosts flagged as unhealthy by Defender for Cloud's vulnerability assessment findings recommendation" },
+                    "entraJoined": { "$ref": "#/$defs/count" },
+                    "domainJoined": { "$ref": "#/$defs/count" },
+                    "intuneEnrollRequested": { "$ref": "#/$defs/count" },
+                    "intuneManaged": { "$ref": "#/$defs/count" },
+                    "intuneCompliant": { "$ref": "#/$defs/count" },
+                    "intuneNoncompliant": { "$ref": "#/$defs/count" },
+                    "intuneSyncStale": { "$ref": "#/$defs/count" },
+                    "intuneConfigErrors": { "$ref": "#/$defs/count" },
+                    "intuneBaselineApplied": { "$ref": "#/$defs/count" },
+                    "hibernation": { "$ref": "#/$defs/count", "description": "Hosts whose VM has hibernationEnabled on in additionalCapabilities" },
+                    "untaggedForCost": { "$ref": "#/$defs/count", "description": "Hosts whose VM was read and carries neither cm-resource-parent nor a cost allocation tag" }
+                  }
+                },
+                "vmSizes": { "$ref": "#/$defs/countMap" },
+                "imageSource": { "enum": ["gallery", "marketplace", "managed", "custom", "unknown"], "description": "Source kind of the session host image" },
+                "imageRegions": { "$ref": "#/$defs/count", "description": "Distinct Azure regions the gallery image version is replicated to" },
+                "images": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["publisher", "hosts"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "publisher": { "$ref": "#/$defs/imagePart", "description": "'custom' for a gallery or managed image, whose name is never copied" },
+                      "offer": { "$ref": "#/$defs/imagePart" },
+                      "sku": { "$ref": "#/$defs/imagePart" },
+                      "hosts": { "$ref": "#/$defs/count" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "virtualMachines": {
+            "type": "object",
+            "required": ["total"],
+            "additionalProperties": false,
+            "properties": {
+              "total": { "$ref": "#/$defs/count" },
+              "sizes": { "$ref": "#/$defs/countMap" },
+              "powerStates": { "$ref": "#/$defs/countMap" },
+              "osTypes": { "$ref": "#/$defs/countMap" }
+            }
+          },
+          "storageAccounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "$ref": "#/$defs/storageId" },
+                "region": { "type": "string", "pattern": "^([a-z0-9]{2,40}|other|unknown)$" },
+                "kind": { "type": "string", "pattern": "^[A-Za-z0-9]{2,40}$" },
+                "sku": { "type": "string", "pattern": "^[A-Za-z0-9_]{2,40}$" },
+                "httpsOnly": { "$ref": "#/$defs/flag" },
+                "minimumTls": { "type": "string", "pattern": "^(TLS[0-9_]{1,6}|other|unknown)$" },
+                "blobPublicAccess": { "$ref": "#/$defs/flag" },
+                "networkDefaultAction": { "type": "string", "pattern": "^[A-Za-z]{2,20}$" },
+                "largeFileShares": { "type": "string", "pattern": "^[A-Za-z]{2,20}$" },
+                "privateEndpoint": { "type": "boolean" },
+                "smbMultichannel": { "$ref": "#/$defs/flag" },
+                "backupProtected": { "$ref": "#/$defs/flag" },
+                "backupTier": { "enum": ["vaulted", "snapshot", "none", "unknown"], "description": "Azure Backup protection tier for Azure Files shares on the account" },
+                "lastBackupJob": { "enum": ["succeeded", "failed", "in-progress", "none", "unknown"], "description": "Outcome of the most recent Azure Backup job for the storage account" },
+                "smbChannelEncryption": { "enum": ["gcm", "aes256-gcm-only", "includes-ccm", "default"], "description": "The file service's SMB channel encryption: 'gcm' allows AES-128-GCM and AES-256-GCM and no CCM; 'default' when it isn't set" },
+                "filesIdentity": { "enum": ["AADKERB", "AD", "AADDS", "None", "other"], "description": "Identity source for Azure Files SMB access (directoryServiceOptions)" }
+              }
+            }
+          },
+          "network": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "virtualNetworks": { "$ref": "#/$defs/count" },
+              "customDnsVirtualNetworks": { "$ref": "#/$defs/count" },
+              "ddosProtectedVirtualNetworks": { "$ref": "#/$defs/count" },
+              "subnets": { "$ref": "#/$defs/count" },
+              "subnetsWithNsg": { "$ref": "#/$defs/count" },
+              "subnetsWithRouteTable": { "$ref": "#/$defs/count" },
+              "subnetDelegations": { "$ref": "#/$defs/countMap" },
+              "defaultRoutes": { "$ref": "#/$defs/countMap", "description": "Route tables' 0.0.0.0/0 routes by next hop type" },
+              "publicIps": { "$ref": "#/$defs/count" },
+              "hostPublicRdp": { "$ref": "#/$defs/count", "description": "NSG rules on session host subnets or NICs allowing inbound TCP/UDP 3389 from Internet or Any" },
+              "privateEndpoints": { "$ref": "#/$defs/countMap", "description": "By group ID (file, blob, ...)" }
+            }
+          },
+          "keyVaults": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "total": { "$ref": "#/$defs/count" },
+              "softDelete": { "$ref": "#/$defs/count" },
+              "purgeProtection": { "$ref": "#/$defs/count" }
+            }
+          },
+          "logAnalytics": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "total": { "$ref": "#/$defs/count" },
+              "retentionDays": { "$ref": "#/$defs/countMap" }
+            }
+          },
+          "policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "assignments": { "$ref": "#/$defs/count" },
+              "doNotEnforce": { "$ref": "#/$defs/count" }
+            }
+          },
+          "roleAssignments": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "roles": { "$ref": "#/$defs/countMap", "description": "Built-in roles from the producer's allowlist; every other role, custom roles included, is 'other'" },
+              "objectTypes": { "$ref": "#/$defs/countMap" }
+            }
+          },
+          "defenderPlans": {
+            "type": "object",
+            "description": "Defender for Cloud plan tier by plan name (VirtualMachines, StorageAccounts, ...)",
+            "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9]{1,40}$" },
+            "additionalProperties": { "enum": ["Free", "Standard"] }
+          },
+          "powerPlatform": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enterprisePoliciesCount": { "$ref": "#/$defs/count" },
+              "vnetInjectedSubnets": { "$ref": "#/$defs/count" }
+            }
+          },
+          "budgets": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "total": { "$ref": "#/$defs/count" },
+              "withActionGroup": { "$ref": "#/$defs/count", "description": "Budgets with at least one enabled notification targeting an action group (contactGroups)" }
+            }
+          },
+          "advisor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "recommendations": { "$ref": "#/$defs/countMap", "description": "Advisor recommendations by category (Cost, HighAvailability, Performance, Security, OperationalExcellence)" },
+              "unattachedDisks": { "$ref": "#/$defs/count", "description": "Advisor Cost recommendations for unattached managed disks" },
+              "rightSizeVms": { "$ref": "#/$defs/count", "description": "Advisor Cost recommendations to right-size or shut down underused virtual machines" },
+              "commitmentRecommendations": { "$ref": "#/$defs/count", "description": "Advisor Cost recommendations to buy VM reservations or a compute savings plan" }
+            }
+          }
+        }
+      }
+    },
+    "entra": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "userGroupsAssigned": { "$ref": "#/$defs/count" },
+        "dynamicHostGroups": { "$ref": "#/$defs/count" },
+        "caPoliciesTargetingAvd": { "$ref": "#/$defs/countMap" },
+        "caAvdRequiresMfa": { "enum": ["enforced", "report-only", "none"] },
+        "caAvdRequiresCompliantDevice": { "enum": ["enforced", "report-only", "none"] },
+        "caAvdSignInFrequencyConfigured": { "type": "boolean" },
+        "caAvdBreakGlassExcluded": { "type": "boolean" },
+        "kerberosStoragePrincipalsReady": { "$ref": "#/$defs/count" },
+        "skuAvdEligibleAvailable": { "$ref": "#/$defs/count" },
+        "skuWin365Available": { "$ref": "#/$defs/count" }
+      }
+    },
+    "intune": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "noPolicyMeansNoncompliant": { "type": "boolean" },
+        "mdmAutoEnrollmentScope": { "enum": ["all", "some", "none"] },
+        "multiSessionCatalogProfiles": { "$ref": "#/$defs/count" },
+        "fslogixProfileConfigured": { "type": "boolean" },
+        "rdpShortpathConfigured": { "type": "boolean" },
+        "sessionTimeLimitsConfigured": { "type": "boolean" },
+        "multiSessionUpdateRingAssigned": { "type": "boolean" },
+        "assignmentFiltersCount": { "$ref": "#/$defs/count" },
+        "multiSessionFilterPresent": { "type": "boolean" },
+        "cloudPcFilterPresent": { "type": "boolean" },
+        "unfilteredAllDevicesPolicies": { "$ref": "#/$defs/count" },
+        "cloudPcManagedCompliant": { "$ref": "#/$defs/count" },
+        "cloudPcManagedNoncompliant": { "$ref": "#/$defs/count" },
+        "win365": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cloudPcCountByStatus": { "$ref": "#/$defs/countMap" },
+            "provisioningPoliciesCount": { "$ref": "#/$defs/count" },
+            "ssoEnabledOnAllPolicies": { "type": "boolean" },
+            "networkMode": { "enum": ["microsoft-hosted", "azure-network-connection", "mixed", "none"] },
+            "ancCountByHealth": { "$ref": "#/$defs/countMap" },
+            "ancFailedCount": { "$ref": "#/$defs/count" },
+            "userSettingsCount": { "$ref": "#/$defs/count" },
+            "localAdminDisabled": { "type": "boolean" },
+            "restorePointFrequencyHoursMax": { "$ref": "#/$defs/count" },
+            "customImagesReady": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "m365": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "oneDriveSilentConfigEnabled": { "type": "boolean" },
+        "oneDriveKfmState": { "enum": ["enforced", "prompt", "none"] },
+        "oneDriveFilesOnDemandEnabled": { "type": "boolean" },
+        "m365AppsSharedComputerActivation": { "type": "boolean" },
+        "outlookCachedModeConfigured": { "type": "boolean" },
+        "teamsMediaOptimizationState": { "enum": ["enabled", "disabled"] },
+        "mmrConfigured": { "type": "boolean" }
+      }
+    },
+    "powerPlatform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dedicatedEnvironments": { "$ref": "#/$defs/count" },
+        "dlpPoliciesCoveringAvdEnv": { "$ref": "#/$defs/count" },
+        "dlpDefaultGroupClassification": { "enum": ["Blocked", "Confidential", "General"] },
+        "avdDay2SolutionsDeployed": { "$ref": "#/$defs/count" },
+        "avdDay2FlowsActive": { "$ref": "#/$defs/countMap" }
+      }
+    },
+    "validations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["subscription", "mode", "generatedUtc", "verdict", "checks"],
+        "additionalProperties": false,
+        "properties": {
+          "subscription": { "$ref": "#/$defs/subscriptionId" },
+          "mode": { "type": "string", "pattern": "^[A-Za-z]{2,30}$" },
+          "generatedUtc": { "$ref": "#/$defs/utc" },
+          "verdict": { "type": "string", "pattern": "^[A-Z]{2,10}$" },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "fail": { "$ref": "#/$defs/count" },
+              "warn": { "$ref": "#/$defs/count" },
+              "pass": { "$ref": "#/$defs/count" },
+              "info": { "$ref": "#/$defs/count" },
+              "skip": { "$ref": "#/$defs/count" }
+            }
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "region": { "$ref": "#/$defs/region" },
+              "sessionHostCount": { "type": "integer", "minimum": 1 },
+              "sessionHostVmSize": { "$ref": "#/$defs/vmSize" }
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["phase", "category", "check", "status"],
+              "additionalProperties": false,
+              "properties": {
+                "phase": { "$ref": "#/$defs/word" },
+                "category": { "$ref": "#/$defs/word" },
+                "check": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._:/()+,'-]{0,99}$", "description": "The validator's check name; 'redacted' when it held a collected name" },
+                "status": { "enum": ["PASS", "WARN", "FAIL", "INFO", "SKIP", "other"] },
+                "target": { "type": "string", "pattern": "^(sub|hp|st)-[0-9a-f]{8}$", "description": "The pseudonym of what the check looked at, when it is a subscription, host pool or storage account in this snapshot. The scope's name and the detail are never copied" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "redactedValues": { "$ref": "#/$defs/count", "description": "Values the producer replaced with 'other' or 'redacted' because they didn't match their field's pattern" }
+  }
+}

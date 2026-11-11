@@ -1,0 +1,39 @@
+{
+  "$schema": "../schemas/rule.schema.json",
+  "id": "calibration",
+  "title": "When a sizing calibration factor applies",
+  "status": "proposed",
+  "version": 2,
+  "usedBy": "Stage 4 sizing (Get-SizingCalibration) and the sizing-evidence importer (ConvertFrom-SizingEvidence)",
+  "values": {
+    "minObservations": 3,
+    "minFactor": 0.5,
+    "maxFactor": 1.5,
+    "groupBy": [
+      "tier",
+      "vmFamily"
+    ],
+    "statistic": "median",
+    "minPeakSessionsPerHost": 3,
+    "minBindingUtilization": 0.4
+  },
+  "sources": [
+    "docs/knowledge-spec.md#12-open-questions",
+    "contracts/sizing-evidence.md"
+  ],
+  "history": [
+    {
+      "version": 1,
+      "date": "2026-10-16",
+      "change": "First policy: the median of measured/predicted per tier and VM family, applied from 3 observations, clamped to 0.5-1.5.",
+      "reason": "Few observations are not a trend (P5); revisit after the second engagement (Q4)"
+    },
+    {
+      "version": 2,
+      "date": "2026-10-16",
+      "change": "Added minPeakSessionsPerHost 3 and minBindingUtilization 0.4 for imported sizing evidence.",
+      "reason": "Measured sessions per host are extrapolated linearly to the target utilization; a lightly loaded host pool would extrapolate too far to be evidence (P5).",
+      "ref": "docs/knowledge/decisions/0001-one-brain-for-the-avd-lifecycle.md"
+    }
+  ]
+}

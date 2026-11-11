@@ -1,0 +1,28 @@
+{
+  "$schema": "../schemas/rule.schema.json",
+  "id": "workload-tiers",
+  "title": "Workload tiers and the sizing prior for multi-session hosts",
+  "status": "active",
+  "version": 1,
+  "usedBy": "Stage 4 personas (tier) and sizing (prior before calibration)",
+  "values": {
+    "maxUsersPerVcpu": { "light": 6, "medium": 4, "heavy": 2, "power": 1 },
+    "multiSessionVcpu": { "min": 4, "recommendedMin": 6, "recommendedMax": 24 },
+    "minMemoryGiBPerSession": { "default": 1, "dSeries": 1.5 },
+    "targetUtilization": 0.8,
+    "tierThresholds": null
+  },
+  "sources": [
+    "https://learn.microsoft.com/windows-server/remote/remote-desktop-services/session-host-virtual-machine-sizing-guidelines",
+    "https://github.com/avd-ops/avd-landing-zone/blob/master/docs/decisions/0010-sizing-and-cost.md",
+    "docs/factory-spec.md#65-sizing-measured-not-guessed"
+  ],
+  "history": [
+    {
+      "version": 1,
+      "date": "2026-10-16",
+      "change": "Seeded with Microsoft's users-per-vCPU guidance, the landing zone's memory rule and the factory spec's 80% target. Tier thresholds (p95 CPU and memory) stay null until the first real estate.",
+      "reason": "Phase 1 of the second brain: start from documented guidance, then calibrate from engagements"
+    }
+  ]
+}
