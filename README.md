@@ -38,7 +38,9 @@ Open `http://127.0.0.1:8787/portal/` (or use Cloud Shell's **Web preview** on po
    - **Session host health & capacity** (drain mode, SxS stack / Geneva / RDAgent unhealthy, CPU/memory/disk contention, WDOT regressions, scaling plan stalls)
    - **Identity, Intune & M365 VDI** (Entra join / SSO failures, Conditional Access blocks, Intune Settings Catalog / compliance drift, Teams SlimCore/WebRTC & OneDrive KFM)
    - **Control-plane deployment & day-2 drift** (failed Bicep/Graph/Power Platform runs from companion vault journals, `C21`/`C24` posture gaps across `azure`, `entra`, `intune`, `m365`, and `power-platform`)
-2. **Evidence & Live Probes**: Correlates offline companion vault data and runs air-tight read-only live probes (Log Analytics / AVD Insights KQL, Azure Resource Graph, Session Host agent health, Microsoft Graph Entra/Intune/M365 `GET` checks, or pasted output).
+2. **Evidence, Live Probes & Native Host Telemetry**: Correlates offline companion vault data, runs air-tight read-only live probes (Log Analytics / AVD Insights KQL, Azure Resource Graph, Session Host agent health, Microsoft Graph Entra/Intune/M365 `GET` checks, or pasted output), and exports native (non-Liquidware) host-level performance and usage telemetry via `scripts/Export-AvdHostTelemetry.ps1` (`Get-Counter`, `Get-WinEvent`, or Log Analytics KQL) into two schema-valid contracts:
+   - **Contract `C25` (`avd-benchmark-result/v1`)** for `avd-benchmark` and `avd-assess`
+   - **Measured Usage (`avd-measured-usage/v1`)** for `avd-migration-factory` and `avd-assess`
 3. **Root Cause & Citations**: Ranks root causes deterministically against `playbooks/catalog.json`, `avd-assess` claims (`ref:` / `obs:`), and `avd-second-brain` known errors. The docked Chat Assistant works 100% offline/free via deterministic triage and upgrades to BYO-LLM reasoning (Azure OpenAI, GitHub Models, Anthropic, OpenAI, or local Ollama) with automatic `redact.js` scrubbing before any external call.
 4. **Remediation Plan & Approval**: Generates three explicit, human-gated remediation outputs (never executing blind writes):
    - **Path A**: Copyable/runnable day-2 PowerShell/Bash fix block with preflight, rollback, and `<<<AVDREM-STATE ...>>>` verification output
@@ -50,7 +52,7 @@ Open `http://127.0.0.1:8787/portal/` (or use Cloud Shell's **Web preview** on po
 
 `avd-remediate` vendors and SHA-256-verifies its upstream contracts in [`contracts/PINS.json`](contracts/PINS.json) (enforced by [`tests/locks.test.mjs`](tests/locks.test.mjs)):
 
-- **`avd-assess`**: `contracts/fact-register.json` (`ref:` / `obs:` claim IDs), `contracts/schemas/remediation-plan.schema.json` (`avd-remediation-plan/v1` `C24`), `contracts/schemas/current-state-facts.schema.json` (`C11`), `contracts/schemas/assessment.schema.json` (`C21`), and `contracts/schemas/benchmark-result.schema.json` (`C25`).
+- **`avd-assess`**: `contracts/fact-register.json` (`ref:` / `obs:` claim IDs), `contracts/schemas/remediation-plan.schema.json` (`avd-remediation-plan/v1` `C24`), `contracts/schemas/current-state-facts.schema.json` (`C11`), `contracts/schemas/assessment.schema.json` (`C21`), `contracts/schemas/benchmark-result.schema.json` (`C25`), and `contracts/schemas/measured-usage.schema.json` (`avd-measured-usage/v1`).
 - **`avd-second-brain`**: `contracts/workload-tiers.json` (per-user vCPU, RAM, IOPS, and network budgets) and `contracts/calibration.json` (logon p95 <= 30s and RTT p95 <= 100ms envelopes).
 - **`avd-current-state`**: `contracts/lz-parameters.json` (canonical `C11` fact-to-Bicep parameter map) and `C11` / `C21` / `C25` ingestion.
 - **`avd-landing-zone`**: `contracts/control-planes.json` (3-stage `Invoke-AvdControlPlanes.ps1` orchestration across `avd-entra`, `avd-intune`, `avd-m365`, `avd-azure`, and `avd-power-platform`).

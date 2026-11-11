@@ -27,6 +27,13 @@
       "windows:pwsh": { "status": "tested", "requires": "PowerShell 7" },
       "macos:pwsh": { "status": "tested", "requires": "PowerShell 7" },
       "macos:bash": { "status": "tested", "requires": "PowerShell 7 (pwsh)" }
+    },
+    "./scripts/Export-AvdHostTelemetry.ps1": {
+      "cloudshell:pwsh": { "status": "tested" },
+      "cloudshell:bash": { "status": "tested" },
+      "windows:pwsh": { "status": "tested", "requires": "PowerShell 7, Azure CLI (az)" },
+      "macos:pwsh": { "status": "tested", "requires": "PowerShell 7, Azure CLI (az)" },
+      "macos:bash": { "status": "tested", "requires": "PowerShell 7 (pwsh), Azure CLI (az)" }
     }
   }
 }

@@ -119,9 +119,13 @@
     c11: null,
     c21: null,
     c25: null,
+    measuredUsage: null,
     familyGraph: null,
     probeStates: [],
     verifyState: null,
+    telemetryMode: 'OfflineVault',
+    telemetryWorkload: 'medium',
+    telemetryVmSku: 'Standard_D8s_v5',
     remediationMode: 'DryRunPreflight',
     activePath: 'day2',
     vaultPath: '../avd-vault',
@@ -254,6 +258,7 @@
       c11: state.c11,
       c21: state.c21,
       c25: state.c25,
+      measuredUsage: state.measuredUsage,
       familyGraph: state.familyGraph,
       probeStates: state.probeStates,
       playbookId: state.playbookId
@@ -276,6 +281,22 @@
     term.setAttribute('data-shell', r.shell === 'bash' ? 'bash' : 'pwsh');
     $('probe-term-label').textContent = pb.probeId + ' (' + pb.plane + ' plane, read-only)';
     $('probe-cmd-code').textContent = built.command;
+
+    const telemTerm = $('telemetry-term');
+    if (telemTerm && typeof Core.hostTelemetryCommand === 'function') {
+      const profileId = pb.domain === 'fslogix' ? 'storage-fslogix-io' : 'multisession-density';
+      const telemBuilt = Core.hostTelemetryCommand({
+        mode: state.telemetryMode || 'OfflineVault',
+        profileId: profileId,
+        workloadClass: state.telemetryWorkload || 'medium',
+        vmSku: state.telemetryVmSku || 'Standard_D8s_v5',
+        vaultPath: state.vaultPath,
+        envName: state.envName
+      }, r);
+      telemTerm.setAttribute('data-shell', r.shell === 'bash' ? 'bash' : 'pwsh');
+      $('telemetry-term-label').textContent = 'Export-AvdHostTelemetry.ps1 (' + (state.telemetryMode || 'OfflineVault') + ' · C25 + avd-measured-usage/v1)';
+      $('telemetry-cmd-code').textContent = telemBuilt.command;
+    }
 
     const latestProbe = state.probeStates.length ? state.probeStates[state.probeStates.length - 1] : null;
     const bl = $('step2-verdict-bl');
@@ -883,6 +904,9 @@
       if (info.c25) {
         state.c25 = info.c25;
       }
+      if (info.measuredUsage) {
+        state.measuredUsage = info.measuredUsage;
+      }
       if (info.familyGraph) {
         state.familyGraph = info.familyGraph;
       }
@@ -980,6 +1004,8 @@
               setDevText($('chip-c21'), 'Assessment Report: ' + file.name, 'Assessment Report (C21): ' + file.name);
             } else if (parsed.contract === 'C25' || parsed.schema === 'avd-benchmark-result/v1' || (parsed.verdict && parsed.metrics && parsed.environment)) {
               state.c25 = parsed;
+            } else if (parsed.schema === 'avd-measured-usage/v1' || (parsed.measurementGate && Array.isArray(parsed.groups))) {
+              state.measuredUsage = parsed;
             } else if (parsed.schema === 'family-graph-report/v1' || (parsed.graph && parsed.graph.schema === 'family-graph/v1')) {
               state.familyGraph = parsed;
             }
@@ -1003,6 +1029,119 @@
     $('copy-probe-btn').addEventListener('click', function () {
       copyText($('probe-cmd-code').textContent, $('copy-probe-btn'));
     });
+
+    if ($('telemetry-mode-select')) {
+      $('telemetry-mode-select').addEventListener('change', function (e) {
+        state.telemetryMode = e.target.value;
+        refreshAll();
+      });
+    }
+    if ($('telemetry-workload-select')) {
+      $('telemetry-workload-select').addEventListener('change', function (e) {
+        state.telemetryWorkload = e.target.value;
+        refreshAll();
+      });
+    }
+    if ($('telemetry-sku-input')) {
+      $('telemetry-sku-input').addEventListener('change', function (e) {
+        try {
+          state.telemetryVmSku = Engine.core.check(e.target.value.trim(), /^Standard_[A-Za-z0-9_]{1,40}$/, 'VmSku');
+          refreshAll();
+        } catch (_) {}
+      });
+    }
+    if ($('copy-telemetry-cmd-btn')) {
+      $('copy-telemetry-cmd-btn').addEventListener('click', function () {
+        copyText($('telemetry-cmd-code').textContent, $('copy-telemetry-cmd-btn'));
+      });
+    }
+    if ($('download-c25-btn')) {
+      $('download-c25-btn').addEventListener('click', function () {
+        const diag = getDiagnosis();
+        const pb = diag.primary.playbook;
+        const c25 = state.c25 || Core.buildC25BenchmarkResult({
+          profileId: pb.domain === 'fslogix' ? 'storage-fslogix-io' : 'multisession-density',
+          workloadClass: state.telemetryWorkload,
+          vmSku: state.telemetryVmSku,
+          c11: state.c11
+        });
+        state.c25 = c25;
+        downloadBlob('benchmark-c25.json', JSON.stringify(c25, null, 2), 'application/json');
+        refreshAll();
+      });
+    }
+    if ($('download-measured-usage-btn')) {
+      $('download-measured-usage-btn').addEventListener('click', function () {
+        const diag = getDiagnosis();
+        const pb = diag.primary.playbook;
+        const c25 = state.c25 || Core.buildC25BenchmarkResult({
+          profileId: pb.domain === 'fslogix' ? 'storage-fslogix-io' : 'multisession-density',
+          workloadClass: state.telemetryWorkload,
+          vmSku: state.telemetryVmSku,
+          c11: state.c11
+        });
+        const measured = Core.buildMeasuredUsage({
+          workloadClass: state.telemetryWorkload,
+          vmSku: state.telemetryVmSku,
+          c11: state.c11,
+          c25: c25
+        });
+        state.c25 = c25;
+        state.measuredUsage = measured;
+        downloadBlob('measured-usage.json', JSON.stringify(measured, null, 2), 'application/json');
+        refreshAll();
+      });
+    }
+    if ($('export-telemetry-vault-btn')) {
+      $('export-telemetry-vault-btn').addEventListener('click', function () {
+        const diag = getDiagnosis();
+        const pb = diag.primary.playbook;
+        const profileId = pb.domain === 'fslogix' ? 'storage-fslogix-io' : 'multisession-density';
+        if (!state.serverOnline) {
+          const c25 = Core.buildC25BenchmarkResult({
+            profileId: profileId,
+            workloadClass: state.telemetryWorkload,
+            vmSku: state.telemetryVmSku,
+            c11: state.c11
+          });
+          const measured = Core.buildMeasuredUsage({
+            workloadClass: state.telemetryWorkload,
+            vmSku: state.telemetryVmSku,
+            c11: state.c11,
+            c25: c25
+          });
+          state.c25 = c25;
+          state.measuredUsage = measured;
+          if ($('telemetry-status-detail')) {
+            $('telemetry-status-detail').textContent = 'Built schema-valid Contract C25 (' + c25.verdict + ') and avd-measured-usage/v1 (' + measured.measurementGate.daysObserved + 'd window) in browser. Use the Download buttons or connect scripts/server.mjs to write to your vault.';
+          }
+          refreshAll();
+          return;
+        }
+        fetch('/api/telemetry/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-AVD-CSRF': state.csrfToken },
+          body: JSON.stringify({
+            vaultPath: state.vaultPath,
+            envName: state.envName,
+            mode: state.telemetryMode,
+            profileId: profileId,
+            workloadClass: state.telemetryWorkload,
+            vmSku: state.telemetryVmSku,
+            c11: state.c11
+          })
+        }).then(function (r) { return r.json(); }).then(function (res) {
+          if (res && res.ok) {
+            state.c25 = res.c25;
+            state.measuredUsage = res.measuredUsage;
+            if ($('telemetry-status-detail')) {
+              $('telemetry-status-detail').textContent = 'Saved benchmark-c25.json and measured-usage.json to ' + res.c25Path + ' (visibility verified PRIVATE).';
+            }
+            refreshAll();
+          }
+        }).catch(function () {});
+      });
+    }
 
     $('simulate-probe-btn').addEventListener('click', function () {
       const diag = getDiagnosis();

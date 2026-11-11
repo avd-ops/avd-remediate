@@ -235,6 +235,46 @@
           </div>
         </div>
 
+        <details class="more" id="host-telemetry-details" open>
+          <summary>Native host-level performance &amp; measured-usage collection (<code>C25</code> for <code>avd-benchmark</code> + <code>avd-measured-usage/v1</code> for <code>avd-migration-factory</code>)</summary>
+          <p class="muted" id="telemetry-status-detail">Collects read-only Windows performance counters (<code>Get-Counter</code>), session host event logs (<code>Get-WinEvent</code>), or Log Analytics KQL telemetry without third-party agents.</p>
+          <div class="row">
+            <label class="field" for="telemetry-mode-select">
+              <span>Collection mode</span>
+              <select id="telemetry-mode-select">
+                <option value="OfflineVault">OfflineVault (Vault + C11 baseline)</option>
+                <option value="LogAnalytics">LogAnalytics (Read-only KQL Perf / WVDConnections)</option>
+                <option value="LocalHost">LocalHost (Get-Counter + Get-WinEvent)</option>
+              </select>
+            </label>
+            <label class="field" for="telemetry-workload-select">
+              <span>Workload class</span>
+              <select id="telemetry-workload-select">
+                <option value="light">light</option>
+                <option value="medium" selected>medium</option>
+                <option value="heavy">heavy</option>
+                <option value="power">power</option>
+              </select>
+            </label>
+            <label class="field" for="telemetry-sku-input">
+              <span>Session host VM SKU</span>
+              <input type="text" id="telemetry-sku-input" value="Standard_D8s_v5">
+            </label>
+          </div>
+          <div class="term" id="telemetry-term" data-shell="pwsh">
+            <div class="term-head">
+              <span class="term-label" id="telemetry-term-label">Export-AvdHostTelemetry.ps1 (C25 + avd-measured-usage/v1)</span>
+              <button type="button" id="copy-telemetry-cmd-btn">Copy</button>
+            </div>
+            <pre tabindex="0"><code id="telemetry-cmd-code"></code></pre>
+          </div>
+          <div class="act">
+            <button type="button" id="export-telemetry-vault-btn">Export C25 + measured-usage to vault</button>
+            <button type="button" class="secondary" id="download-c25-btn">Download benchmark-c25.json (C25)</button>
+            <button type="button" class="secondary" id="download-measured-usage-btn">Download measured-usage.json</button>
+          </div>
+        </details>
+
         <details class="more">
           <summary>Matched Estate Facts<span class="dev-id"> (C11)</span> &amp; Assessment Report<span class="dev-id"> (C21)</span> check outcomes from loaded estate</summary>
           <div class="table-wrap">

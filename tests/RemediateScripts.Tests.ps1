@@ -3,10 +3,11 @@
 
 BeforeAll {
     $script:RepoRoot = Split-Path -Parent $PSScriptRoot
-    $script:ProbeScript = Join-Path $script:RepoRoot 'scripts' 'Invoke-AvdDiagnosticProbe.ps1'
-    $script:PlanScript = Join-Path $script:RepoRoot 'scripts' 'Invoke-AvdRemediationPlan.ps1'
-    $script:ScopePath = Join-Path $script:RepoRoot 'rebuild' 'scope.json'
-    $script:CatalogPath = Join-Path $script:RepoRoot 'playbooks' 'catalog.json'
+    $script:ProbeScript = Join-Path $script:RepoRoot 'scripts/Invoke-AvdDiagnosticProbe.ps1'
+    $script:PlanScript = Join-Path $script:RepoRoot 'scripts/Invoke-AvdRemediationPlan.ps1'
+    $script:TelemetryScript = Join-Path $script:RepoRoot 'scripts/Export-AvdHostTelemetry.ps1'
+    $script:ScopePath = Join-Path $script:RepoRoot 'rebuild/scope.json'
+    $script:CatalogPath = Join-Path $script:RepoRoot 'playbooks/catalog.json'
 }
 
 Describe 'Invoke-AvdDiagnosticProbe.ps1 allowlist and read-only enforcement' {
@@ -63,7 +64,7 @@ Describe 'Invoke-AvdDiagnosticProbe.ps1 allowlist and read-only enforcement' {
         @{ Domain = 'control-planes'; ProbeId = 'probe-cp-power-platform-health'; Plane = 'power-platform' }
     ) {
         $sandboxDir = Join-Path $TestDrive "sandbox-$Domain"
-        $envDir = Join-Path $sandboxDir 'environments' 'contoso-lab'
+        $envDir = Join-Path $sandboxDir 'environments/contoso-lab'
         New-Item -ItemType Directory -Path $envDir -Force | Out-Null
         $c21Fixture = [ordered]@{
             schema = 'avd-assessment-report/v1'
@@ -137,3 +138,40 @@ Describe 'Invoke-AvdRemediationPlan.ps1 preflight, approval gate, and rollback e
         $rbState.status | Should -Be 'pass'
     }
 }
+
+Describe 'Export-AvdHostTelemetry.ps1 dual-contract export (C25 + avd-measured-usage/v1)' {
+    It 'exports schema-valid benchmark-c25.json and measured-usage.json and emits host-telemetry AVDREM-STATE' {
+        $vaultDir = Join-Path $TestDrive 'private-telemetry-vault'
+        New-Item -ItemType Directory -Path (Join-Path $vaultDir 'environments/contoso-lab') -Force | Out-Null
+
+        $outLine = & $script:TelemetryScript -Mode 'OfflineVault' -ProfileId 'multisession-density' -WorkloadClass 'medium' -VmSku 'Standard_D8s_v5' -VaultPath $vaultDir -Environment 'contoso-lab' -OfflineDemo
+        $outLine | Should -Match '^<<<AVDREM-STATE (\{.*\}) AVDREM-STATE>>>$'
+        $state = ([regex]::Match($outLine, '^<<<AVDREM-STATE (\{.*\}) AVDREM-STATE>>>$').Groups[1].Value) | ConvertFrom-Json
+        $state.stage | Should -Be 'host-telemetry'
+        $state.status | Should -Be 'pass'
+        $state.measurementGate | Should -Be 'pass'
+        (Test-Path -LiteralPath $state.c25Path) | Should -BeTrue
+        (Test-Path -LiteralPath $state.measuredUsagePath) | Should -BeTrue
+
+        $c25 = Get-Content -LiteralPath $state.c25Path -Raw | ConvertFrom-Json
+        $c25.schema | Should -Be 'avd-benchmark-result/v1'
+        $c25.profile.id | Should -Be 'multisession-density'
+        $c25.verdict.experienceGate | Should -Be 'pass'
+
+        $measured = Get-Content -LiteralPath $state.measuredUsagePath -Raw | ConvertFrom-Json
+        $measured.schema | Should -Be 'avd-measured-usage/v1'
+        $measured.tier | Should -Be 'tier-2-insights'
+        $measured.producer.name | Should -Be 'avd-remediate'
+        $measured.measurementGate.passed | Should -BeTrue
+        @($measured.groups).Count | Should -Be 1
+    }
+
+    It 'refuses to write telemetry into a public avd-ops repository path' {
+        $publicFake = Join-Path $TestDrive 'avd-remediate'
+        New-Item -ItemType Directory -Path $publicFake -Force | Out-Null
+        {
+            & $script:TelemetryScript -VaultPath $publicFake -OfflineDemo
+        } | Should -Throw "*Refusing to write telemetry into public avd-ops repository*"
+    }
+}
+

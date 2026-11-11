@@ -4,11 +4,12 @@
   "sources": {
     "avd-assess": {
       "repository": "https://github.com/avd-ops/avd-assess",
-      "commit": "8875905528f36907cf397f508f1348c566222f3e",
+      "commit": "93d6474e99045ef7dbed82eb059ae9504e6e2b65",
       "files": {
-        "contracts/fact-register.json": "52a12178817e4189c19329c3cf9b4b3f3ebdd8e87c6e5ec72d54c26b6d1a2651",
+        "contracts/fact-register.json": "23f8fa464c3bde50cb0c7fed76cb2a9677169c1201cb0f92c6c70b5409fdcd6e",
         "contracts/schemas/remediation-plan.schema.json": "e6eac145014877abffe652d9373972427d64d24f346b27dd37a711e98fba6ed7",
         "contracts/schemas/benchmark-result.schema.json": "1d7967b2c4dac6306acc250e45dc3be3ed4e9ae6df9387aa591fef59e84fe8ed",
+        "contracts/schemas/measured-usage.schema.json": "b8aa9dea2e7c8907dbf91485673a51befb7e6ac2335b8fd7053ae9395bd5fcee",
         "contracts/schemas/current-state-facts.schema.json": "718eab774acc4fa6cf9aca50636b3226808b8bd304afd85081527241bce570e6",
         "contracts/schemas/assessment.schema.json": "6597b9a08e0db64c79e091713194af7a27bbd79015071507fa1df8b8bea736e3"
       }

@@ -332,3 +332,58 @@ test('inferEnvironmentName() resolves environment from explicit envName, C21, sn
   assert.equal(Core.inferEnvironmentName({}, [{ path: 'environments/tailspin-stage/findings.md' }], {}), 'tailspin-stage');
   assert.equal(Core.inferEnvironmentName({}, [], {}), 'default-estate');
 });
+
+test('hostTelemetryCommand() and evaluateMeasuredUsage() support native host telemetry collection and diagnosis', () => {
+  const cmdPwsh = Core.hostTelemetryCommand({
+    mode: 'LocalHost',
+    profileId: 'multisession-density',
+    workloadClass: 'heavy',
+    vmSku: 'Standard_D8s_v5',
+    vaultPath: '../avd-vault'
+  }, { where: 'windows', shell: 'pwsh' });
+  assert.equal(cmdPwsh.support.status, 'tested');
+  assert.match(cmdPwsh.command, /Export-AvdHostTelemetry\.ps1 -Mode 'LocalHost'/);
+
+  const diag = Core.diagnose({
+    measuredUsage: {
+      schema: 'avd-measured-usage/v1',
+      estate: 'est-12345678',
+      generatedUtc: '2026-11-11T00:00:00Z',
+      tier: 'tier-2-insights',
+      producer: { name: 'avd-remediate', version: '0.2.0' },
+      measurementGate: {
+        windowStart: '2026-10-21T00:00:00Z',
+        windowEnd: '2026-11-11T00:00:00Z',
+        daysObserved: 21,
+        coveragePercent: 95,
+        peakIncluded: true,
+        passed: true
+      },
+      groups: [
+        {
+          id: 'grp-01',
+          sourcePoolId: 'hp-12345678',
+          userCount: 40,
+          peakConcurrency: 32,
+          hourlyConcurrency: new Array(24).fill(0.5),
+          cpuPerUserCores: { p50: 0.8, p95: 1.8 },
+          memoryPerUserGiB: { p50: 3.5, p95: 6.0 },
+          steadyStateIopsPerUser: { p50: 25, p95: 80 },
+          logonStormIopsPerUser: { p50: 120, p95: 290 },
+          profileSizeGiB: { p50: 12, p95: 38 },
+          dailyProfileChurnPercent: 8.5,
+          logonDurationSeconds: { p50: 24, p95: 48 },
+          experienceScore: { p50: 72, p95: 58 },
+          gpuRequired: false,
+          needsLocalAdmin: false,
+          rttMsByRegion: { eastus2: { p50: 40, p95: 135 } },
+          sharedBackendIds: ['dep-01']
+        }
+      ]
+    }
+  });
+
+  assert.ok(diag.all.some((f) => f.playbook.id === 'pb-fsx-storage-throttling' && f.signals.some((s) => s.includes('Measured usage'))));
+  assert.ok(diag.all.some((f) => f.playbook.id === 'pb-conn-shortpath-blocked' && f.signals.some((s) => s.includes('rttMsByRegion'))));
+});
+

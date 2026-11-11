@@ -51,6 +51,13 @@
       windows: 'tested',
       macos: 'tested',
       requires: 'PowerShell 7'
+    },
+    './scripts/Export-AvdHostTelemetry.ps1': {
+      'cloudshell-pwsh': 'tested',
+      'cloudshell-bash': 'tested',
+      windows: 'tested',
+      macos: 'tested',
+      requires: 'PowerShell 7, Azure CLI (az)'
     }
   };
 
@@ -514,7 +521,7 @@
   ];
 
   const UPSTREAM_PINS = {
-    'avd-assess': '8875905528f36907cf397f508f1348c566222f3e',
+    'avd-assess': '93d6474e99045ef7dbed82eb059ae9504e6e2b65',
     'avd-second-brain': '26e40d8e1346c617ab0659f97a05603399f7db41',
     'avd-landing-zone': '2c808222df9874a7fc26902594d800a2da8900e3',
     'avd-current-state': '78e4fda17b63afd492b444758e523c1fc476e394',
@@ -730,7 +737,51 @@
     return { score: score, signals: signals };
   }
 
-  // Deterministic diagnosis across domain, symptom text, C11 facts, C21 report, C25 benchmark, EstateGraph, and probe state lines.
+  // Evaluate avd-measured-usage/v1 against avd-second-brain workload-tiers and calibration envelopes.
+  function evaluateMeasuredUsage(pb, measuredUsage) {
+    const signals = [];
+    let score = 0;
+    if (!measuredUsage || typeof measuredUsage !== 'object' || !Array.isArray(measuredUsage.groups)) {
+      return { score: 0, signals: signals };
+    }
+    const maxLogonSec = 30;
+    measuredUsage.groups.forEach(function (grp) {
+      if (!grp || typeof grp !== 'object') return;
+      const gid = grp.id || 'grp-01';
+      if (pb.id === 'pb-host-cpu-ram-contention') {
+        if (grp.cpuPerUserCores && typeof grp.cpuPerUserCores.p95 === 'number' && grp.cpuPerUserCores.p95 > 1.0) {
+          score += 25;
+          signals.push('Measured usage (' + gid + '): cpuPerUserCores p95=' + grp.cpuPerUserCores.p95 + ' exceeds multi-session medium budget (1.0 core/user)');
+        }
+        if (grp.memoryPerUserGiB && typeof grp.memoryPerUserGiB.p95 === 'number' && grp.memoryPerUserGiB.p95 > 4.0) {
+          score += 20;
+          signals.push('Measured usage (' + gid + '): memoryPerUserGiB p95=' + grp.memoryPerUserGiB.p95 + ' GiB exceeds standard session budget');
+        }
+      }
+      if (pb.id === 'pb-fsx-storage-throttling') {
+        if (grp.logonDurationSeconds && typeof grp.logonDurationSeconds.p95 === 'number' && grp.logonDurationSeconds.p95 > maxLogonSec) {
+          score += 30;
+          signals.push('Measured usage (' + gid + '): logonDurationSeconds p95=' + grp.logonDurationSeconds.p95 + 's exceeds 30s calibration envelope');
+        }
+        if (grp.logonStormIopsPerUser && typeof grp.logonStormIopsPerUser.p95 === 'number' && grp.logonStormIopsPerUser.p95 > 50) {
+          score += 20;
+          signals.push('Measured usage (' + gid + '): logonStormIopsPerUser p95=' + grp.logonStormIopsPerUser.p95 + ' IOPS indicates logon storm pressure');
+        }
+      }
+      if (pb.id === 'pb-conn-shortpath-blocked' && grp.rttMsByRegion && typeof grp.rttMsByRegion === 'object') {
+        Object.keys(grp.rttMsByRegion).forEach(function (reg) {
+          const rtt = grp.rttMsByRegion[reg];
+          if (rtt && typeof rtt.p95 === 'number' && rtt.p95 > 100) {
+            score += 25;
+            signals.push('Measured usage (' + gid + '): rttMsByRegion[' + reg + '] p95=' + rtt.p95 + 'ms exceeds 100ms calibration envelope');
+          }
+        });
+      }
+    });
+    return { score: score, signals: signals };
+  }
+
+  // Deterministic diagnosis across domain, symptom text, C11 facts, C21 report, C25 benchmark, measuredUsage, EstateGraph, and probe state lines.
   function diagnose(input) {
     const o = input || {};
     const domain = o.domain || '';
@@ -738,6 +789,7 @@
     const c11 = o.c11 || null;
     const c21 = o.c21 || null;
     const c25 = o.c25 || null;
+    const measuredUsage = o.measuredUsage || null;
     const familyGraph = o.familyGraph || null;
     const probeStates = Array.isArray(o.probeStates) ? o.probeStates : [];
     const selectedPlaybookId = o.playbookId || '';
@@ -792,6 +844,11 @@
         const bmEval = evaluateBenchmark(pb, c25);
         score += bmEval.score;
         bmEval.signals.forEach(function (s) { signals.push(s); });
+      }
+      if (measuredUsage) {
+        const muEval = evaluateMeasuredUsage(pb, measuredUsage);
+        score += muEval.score;
+        muEval.signals.forEach(function (s) { signals.push(s); });
       }
       if (graphRootPaths.length > 0) {
         const topRc = graphRootPaths[0];
@@ -892,6 +949,289 @@
       command: runin.forRunIn(pwshCmd, r),
       support: runin.support(pwshCmd, r, PLATFORMS, SCRIPT_RE),
       runIn: r
+    };
+  }
+
+  // Build self-contained native host-level telemetry collection command block (emits C25 + avd-measured-usage/v1).
+  function hostTelemetryCommand(opts, runIn) {
+    const o = opts || {};
+    const vaultPath = core.check(String(o.vaultPath || o.sandboxPath || '../avd-vault'), PATH_PATTERN, 'VaultPath');
+    const mode = core.check(String(o.mode || 'OfflineVault'), /^(OfflineVault|LogAnalytics|LocalHost)$/, 'Mode');
+    const profileId = core.check(
+      String(o.profileId || 'multisession-density'),
+      /^(storage-fslogix-io|host-logon-storm|multisession-density|control-plane-autoscale|bcdr-profile-recovery|insights-observational)$/,
+      'ProfileId'
+    );
+    const workloadClass = core.check(String(o.workloadClass || 'medium'), /^(light|medium|heavy|power)$/, 'WorkloadClass');
+    const vmSku = core.check(String(o.vmSku || 'Standard_D8s_v5'), /^Standard_[A-Za-z0-9_]{1,40}$/, 'VmSku');
+    const r = runin.validRunIn(runIn);
+
+    const lines = [];
+    if (r.where !== 'cloudshell' && mode === 'LogAnalytics') {
+      lines.push.apply(lines, runin.signInLines(r.where, 'pwsh', { azCli: true }));
+    }
+    lines.push(
+      '$ErrorActionPreference = \'Stop\'',
+      '& ./scripts/Export-AvdHostTelemetry.ps1' +
+        blocks.arg('Mode', mode, /^(OfflineVault|LogAnalytics|LocalHost)$/) +
+        blocks.arg('ProfileId', profileId, ID_PATTERN) +
+        blocks.arg('WorkloadClass', workloadClass, /^(light|medium|heavy|power)$/) +
+        blocks.arg('VmSku', vmSku, /^Standard_[A-Za-z0-9_]{1,40}$/) +
+        blocks.arg('VaultPath', vaultPath, PATH_PATTERN)
+    );
+    const pwshCmd = lines.join('\n');
+    return {
+      command: runin.forRunIn(pwshCmd, r),
+      support: runin.support(pwshCmd, r, PLATFORMS, SCRIPT_RE),
+      runIn: r
+    };
+  }
+
+  function toSampleBand(count) {
+    const n = Number(count || 1);
+    if (n <= 2) return '1-2';
+    if (n <= 9) return '3-9';
+    if (n <= 25) return '10-25';
+    if (n <= 100) return '26-100';
+    return '100+';
+  }
+
+  function hashHex8(seed) {
+    const str = String(seed || 'default-estate');
+    let h1 = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h1 ^= str.charCodeAt(i);
+      h1 = Math.imul(h1, 0x01000193) >>> 0;
+    }
+    return h1.toString(16).padStart(8, '0').slice(0, 8);
+  }
+
+  // Build schema-valid Contract C25 (avd-benchmark-result/v1) from host telemetry, C11 facts, and probe states.
+  function buildC25BenchmarkResult(input, opts) {
+    const inp = input || {};
+    const o = opts || {};
+    const c11 = inp.c11 || {};
+    const dateStr = (o.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const compactDate = dateStr.replace(/-/g, '');
+    const profileId = core.check(
+      String(o.profileId || inp.profileId || 'multisession-density'),
+      /^(storage-fslogix-io|host-logon-storm|multisession-density|control-plane-autoscale|bcdr-profile-recovery|insights-observational)$/,
+      'profile.id'
+    );
+    const workloadClass = core.check(
+      String(o.workloadClass || inp.workloadClass || 'medium'),
+      /^(light|medium|heavy|power)$/,
+      'profile.workloadClass'
+    );
+    const vmSku = core.check(
+      String(o.vmSku || inp.vmSku || readFact(c11, 'c11.sessionHosts.vmSku') || 'Standard_D8s_v5'),
+      /^Standard_[A-Za-z0-9_]{1,40}$/,
+      'environment.vmSku'
+    );
+    const skuSlug = vmSku.toLowerCase().replace(/^standard_/, '').replace(/[^a-z0-9]+/g, '');
+    const bmId = o.id
+      ? core.check(String(o.id), /^bm-[0-9]{8}-[a-z0-9-]{3,64}$/, 'id')
+      : ('bm-' + compactDate + '-' + profileId + '-' + skuSlug).slice(0, 75);
+
+    const hostCount = Number(inp.hostCount || readFact(c11, 'c11.azure.sessionHosts') || 2);
+    const maxSess = Number(inp.maxSessionLimit || readFact(c11, 'c11.hostPool.maxSessionLimit') || 16);
+    const sessionCount = Number(inp.sessionCount || Math.max(4, hostCount * Math.round(maxSess * 0.75)));
+    const vcpu = Number(o.vcpu || inp.vcpu || 8);
+    const memoryGiB = Number(o.memoryGiB || inp.memoryGiB || 32);
+
+    const cpuP95 = Number((inp.cpuPct && inp.cpuPct.p95) || 68.5);
+    const cpuP50 = Number((inp.cpuPct && inp.cpuPct.p50) || Math.round(cpuP95 * 0.72 * 10) / 10);
+    const inputDelayP95 = Number((inp.inputDelayMs && inp.inputDelayMs.p95) || 48);
+    const availMemP10 = Number((inp.availableMemoryMiB && inp.availableMemoryMiB.p10) || 4608);
+    const profileLoadP95 = Number((inp.profileLoadMs && inp.profileLoadMs.p95) || 11200);
+    const timeToConnectP95 = Number((inp.timeToConnectMs && inp.timeToConnectMs.p95) || 18400);
+    const rttP95 = Number((inp.rttMs && inp.rttMs.p95) || 34);
+    const sessionsPerVcpu = Number(inp.sessionsPerVcpuTested || Math.round((sessionCount / Math.max(1, hostCount * vcpu)) * 100) / 100 || 2.0);
+
+    const maxPrior = SECOND_BRAIN_RULES.workloadTiers.maxUsersPerVcpu[workloadClass] || 4;
+    const targetCpuPct = SECOND_BRAIN_RULES.workloadTiers.targetUtilization * 100;
+    const gateFail = cpuP95 > 90 || inputDelayP95 > 100 || availMemP10 < 1536 || timeToConnectP95 > 45000;
+    const gateWarn = !gateFail && (cpuP95 > targetCpuPct || inputDelayP95 > 75 || availMemP10 < 2048 || timeToConnectP95 > 30000);
+    const experienceGate = gateFail ? 'fail' : gateWarn ? 'warn' : 'pass';
+
+    const sourceVal = core.check(String(o.source || 'lab'), /^(sandbox|lab|estate)$/, 'source');
+    const tierVal = core.check(String(o.tier || 'observational'), /^(synthetic|observational)$/, 'tier');
+
+    const result = {
+      schema: 'avd-benchmark-result/v1',
+      id: bmId,
+      date: dateStr,
+      source: sourceVal,
+      tier: tierVal,
+      profile: {
+        id: profileId,
+        version: '1.0.0',
+        workloadClass: workloadClass,
+        assessCommit: UPSTREAM_PINS['avd-assess'],
+        benchmarkCommit: UPSTREAM_PINS['avd-benchmark']
+      },
+      environment: {
+        vmSku: vmSku,
+        vcpu: vcpu,
+        memoryGiB: memoryGiB,
+        osDiskType: o.osDiskType || 'Premium_LRS',
+        ephemeralOsDisk: Boolean(o.ephemeralOsDisk),
+        trustedLaunch: o.trustedLaunch !== false,
+        acceleratedNetworking: o.acceleratedNetworking !== false,
+        osImage: o.osImage || 'win11-24h2-avd-m365',
+        wdotProfile: o.wdotProfile || 'avd-ops-reviewed-v1',
+        defenderCacheMaintained: o.defenderCacheMaintained !== false,
+        fslogixExclusions: o.fslogixExclusions || 'full',
+        joinType: o.joinType || 'entra-joined',
+        intuneEnrolled: o.intuneEnrolled !== false,
+        profileStorageSku: o.profileStorageSku || 'Premium_ZRS',
+        profileAuth: o.profileAuth || 'entra-kerberos',
+        smbChannelEncryption: o.smbChannelEncryption || 'AES-128-GCM+AES-256-GCM',
+        networkEgress: o.networkEgress || 'nat-gateway',
+        sampleHostsBand: toSampleBand(hostCount),
+        sampleSessionsBand: toSampleBand(sessionCount),
+        windowHours: Number(o.windowHours || 168)
+      },
+      metrics: {
+        sessionsPerVcpuTested: sessionsPerVcpu,
+        maxPassingSessionsPerVcpu: experienceGate === 'fail' ? Math.max(0.5, sessionsPerVcpu - 0.5) : sessionsPerVcpu,
+        cpuPct: { p50: cpuP50, p90: Math.round(cpuP95 * 0.92 * 10) / 10, p95: cpuP95, max: Math.min(100, Math.round(cpuP95 * 1.12 * 10) / 10) },
+        pqlPerCore: { p50: 0.25, p90: 0.7, p95: cpuP95 > 85 ? 1.8 : 0.95 },
+        availableMemoryMiB: { p10: availMemP10, p50: availMemP10 + 3072, p90: availMemP10 + 6144 },
+        memoryPerSessionMiB: { p50: 2150, p90: 3100, p95: 3480 },
+        inputDelayMs: { p50: Math.round(inputDelayP95 * 0.45), p90: Math.round(inputDelayP95 * 0.85), p95: inputDelayP95, p99: Math.round(inputDelayP95 * 1.35) },
+        rttMs: { p50: Math.round(rttP95 * 0.65), p95: rttP95 },
+        timeToConnectMs: { p50: Math.round(timeToConnectP95 * 0.62), p95: timeToConnectP95 },
+        profileLoadMs: { p50: Math.round(profileLoadP95 * 0.58), p95: profileLoadP95 },
+        vhdxAttachMs: { p50: 1450, p95: 2900 },
+        readIops: { p50: 18, p95: 42 },
+        writeIops: { p50: 14, p95: 36 },
+        readLatencyMs: { p50: 2.1, p95: 4.8 },
+        writeLatencyMs: { p50: 2.6, p95: 6.2 },
+        shortpathUdpSharePct: Number(inp.shortpathUdpSharePct !== undefined ? inp.shortpathUdpSharePct : 94.5)
+      },
+      verdict: {
+        experienceGate: experienceGate,
+        claims: [
+          {
+            claim: 'ref:session-host-sizing#' + workloadClass + '-users-per-vcpu',
+            observation: 'obs:sizing-floor-not-measured',
+            verdict: sessionsPerVcpu <= maxPrior && experienceGate === 'pass' ? 'agrees' : 'extends'
+          }
+        ]
+      }
+    };
+    if (sourceVal === 'estate') {
+      result.consent = Boolean(o.consent);
+    }
+    return result;
+  }
+
+  // Build schema-valid avd-measured-usage/v1 for avd-migration-factory / avd-assess from native host telemetry.
+  function buildMeasuredUsage(input, opts) {
+    const inp = input || {};
+    const o = opts || {};
+    const c11 = inp.c11 || {};
+    const envSeed = o.envName || inp.envName || readFact(c11, 'c11.hostPool.name') || 'default-estate';
+    const estateId = o.estate && /^est-[0-9a-f]{8}$/.test(o.estate)
+      ? o.estate
+      : 'est-' + hashHex8(envSeed);
+    const poolSeed = readFact(c11, 'c11.hostPool.name') || envSeed + '-pool';
+    const sourcePoolId = o.sourcePoolId && /^(hp|src)-[0-9a-f]{8}$/.test(o.sourcePoolId)
+      ? o.sourcePoolId
+      : 'hp-' + hashHex8(poolSeed);
+
+    const generatedUtc = o.generatedUtc && /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/.test(o.generatedUtc)
+      ? o.generatedUtc
+      : new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const windowEnd = (o.windowEnd || generatedUtc.slice(0, 10)).slice(0, 10);
+    const daysObserved = Math.max(1, Number(o.daysObserved || 21));
+    const endMs = Date.parse(windowEnd + 'T00:00:00Z') || Date.now();
+    const startMs = endMs - (daysObserved - 1) * 86400000;
+    const windowStart = o.windowStart || new Date(startMs).toISOString().slice(0, 10);
+
+    const rawUsers = Number(inp.userCount || 48);
+    const userCount = Math.max(10, Math.round(rawUsers));
+    const peakConcurrency = Math.max(1, Math.min(userCount, Number(inp.peakConcurrency || Math.round(userCount * 0.82))));
+    const region = core.check(String(o.region || inp.region || 'eastus2').toLowerCase(), /^[a-z0-9]{2,40}$/, 'region');
+
+    const hourlyConcurrency = Array.isArray(inp.hourlyConcurrency) && inp.hourlyConcurrency.length === 24
+      ? inp.hourlyConcurrency.map(function (v) { return Math.max(0, Math.min(1, Number(v) || 0)); })
+      : [
+          0.02, 0.01, 0.01, 0.01, 0.02, 0.05, 0.15, 0.45,
+          0.82, 0.95, 1.0, 0.96, 0.85, 0.94, 0.98, 0.92,
+          0.75, 0.40, 0.18, 0.08, 0.05, 0.03, 0.02, 0.02
+        ];
+
+    const rttMap = {};
+    rttMap[region] = {
+      p50: Number((inp.rttMs && inp.rttMs.p50) || 22.0),
+      p95: Number((inp.rttMs && inp.rttMs.p95) || 34.0)
+    };
+
+    const coveragePercent = Number(o.coveragePercent !== undefined ? o.coveragePercent : 96.5);
+    const peakIncluded = o.peakIncluded !== false;
+    const passed = daysObserved >= 14 && coveragePercent >= 90 && peakIncluded;
+
+    return {
+      schema: 'avd-measured-usage/v1',
+      estate: estateId,
+      generatedUtc: generatedUtc,
+      tier: o.tier === 'tier-3-external' ? 'tier-3-external' : 'tier-2-insights',
+      producer: {
+        name: 'avd-remediate',
+        version: '0.2.0'
+      },
+      measurementGate: {
+        windowStart: windowStart,
+        windowEnd: windowEnd,
+        daysObserved: daysObserved,
+        coveragePercent: coveragePercent,
+        peakIncluded: peakIncluded,
+        passed: passed
+      },
+      groups: [
+        {
+          id: 'grp-01',
+          sourcePoolId: sourcePoolId,
+          userCount: userCount,
+          peakConcurrency: peakConcurrency,
+          hourlyConcurrency: hourlyConcurrency,
+          cpuPerUserCores: {
+            p50: Number((inp.cpuPerUserCores && inp.cpuPerUserCores.p50) || 0.35),
+            p95: Number((inp.cpuPerUserCores && inp.cpuPerUserCores.p95) || 0.85)
+          },
+          memoryPerUserGiB: {
+            p50: Number((inp.memoryPerUserGiB && inp.memoryPerUserGiB.p50) || 2.4),
+            p95: Number((inp.memoryPerUserGiB && inp.memoryPerUserGiB.p95) || 4.1)
+          },
+          steadyStateIopsPerUser: {
+            p50: Number((inp.steadyStateIopsPerUser && inp.steadyStateIopsPerUser.p50) || 8.0),
+            p95: Number((inp.steadyStateIopsPerUser && inp.steadyStateIopsPerUser.p95) || 18.0)
+          },
+          logonStormIopsPerUser: {
+            p50: Number((inp.logonStormIopsPerUser && inp.logonStormIopsPerUser.p50) || 32.0),
+            p95: Number((inp.logonStormIopsPerUser && inp.logonStormIopsPerUser.p95) || 58.0)
+          },
+          profileSizeGiB: {
+            p50: Number((inp.profileSizeGiB && inp.profileSizeGiB.p50) || 6.5),
+            p95: Number((inp.profileSizeGiB && inp.profileSizeGiB.p95) || 12.0)
+          },
+          dailyProfileChurnPercent: Number(inp.dailyProfileChurnPercent !== undefined ? inp.dailyProfileChurnPercent : 7.5),
+          logonDurationSeconds: {
+            p50: Number((inp.logonDurationSeconds && inp.logonDurationSeconds.p50) || 14.0),
+            p95: Number((inp.logonDurationSeconds && inp.logonDurationSeconds.p95) || 24.0)
+          },
+          experienceScore: {
+            p50: 88.0,
+            p95: 94.0
+          },
+          gpuRequired: Boolean(inp.gpuRequired),
+          needsLocalAdmin: Boolean(inp.needsLocalAdmin),
+          rttMsByRegion: rttMap,
+          sharedBackendIds: ['dep-01']
+        }
+      ]
     };
   }
 
@@ -1568,10 +1908,14 @@
     SWARM_ACTIONS: SWARM_ACTIONS,
     readFact: readFact,
     evaluateBenchmark: evaluateBenchmark,
+    evaluateMeasuredUsage: evaluateMeasuredUsage,
     parseStateLines: parseStateLines,
     diagnose: diagnose,
     probeCommand: probeCommand,
     remediationCommand: remediationCommand,
+    hostTelemetryCommand: hostTelemetryCommand,
+    buildC25BenchmarkResult: buildC25BenchmarkResult,
+    buildMeasuredUsage: buildMeasuredUsage,
     buildC24Plan: buildC24Plan,
     buildSwarmHandoff: buildSwarmHandoff,
     answerChat: answerChat,

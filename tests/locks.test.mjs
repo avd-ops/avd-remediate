@@ -145,3 +145,59 @@ test('buildC24Plan() JSON output conforms strictly to avd-assess contracts/schem
   assert.ok(plan.extensions && plan.extensions['avd-remediate']);
   assert.equal(plan.extensions['avd-remediate'].summary.totalItems, 14);
 });
+
+test('buildC25BenchmarkResult() and buildMeasuredUsage() conform strictly to avd-assess benchmark-result.schema.json and measured-usage.schema.json', () => {
+  const BenchmarkSchema = JSON.parse(fs.readFileSync(path.join(ROOT, 'contracts/schemas/benchmark-result.schema.json'), 'utf8'));
+  const MeasuredSchema = JSON.parse(fs.readFileSync(path.join(ROOT, 'contracts/schemas/measured-usage.schema.json'), 'utf8'));
+
+  const c25 = JSON.parse(JSON.stringify(Core.buildC25BenchmarkResult({
+    profileId: 'multisession-density',
+    workloadClass: 'medium',
+    vmSku: 'Standard_D8s_v5'
+  })));
+
+  const allowedC25Keys = new Set(Object.keys(BenchmarkSchema.properties));
+  for (const k of Object.keys(c25)) {
+    assert.ok(allowedC25Keys.has(k), `Unexpected C25 top-level property: ${k}`);
+  }
+  for (const reqKey of BenchmarkSchema.required) {
+    assert.ok(c25[reqKey] !== undefined, `Missing required C25 property: ${reqKey}`);
+  }
+  assert.equal(c25.schema, 'avd-benchmark-result/v1');
+  assert.match(c25.id, /^bm-[0-9]{8}-[a-z0-9-]{3,64}$/);
+  assert.ok(['pass', 'warn', 'fail'].includes(c25.verdict.experienceGate));
+
+  const measured = JSON.parse(JSON.stringify(Core.buildMeasuredUsage({
+    workloadClass: 'medium',
+    vmSku: 'Standard_D8s_v5',
+    c25
+  }, { estate: 'est-deadbeef' })));
+
+  const allowedMeasuredKeys = new Set(Object.keys(MeasuredSchema.properties));
+  for (const k of Object.keys(measured)) {
+    assert.ok(allowedMeasuredKeys.has(k), `Unexpected measured-usage top-level property: ${k}`);
+  }
+  for (const reqKey of MeasuredSchema.required) {
+    assert.ok(measured[reqKey] !== undefined, `Missing required measured-usage property: ${reqKey}`);
+  }
+  assert.equal(measured.schema, 'avd-measured-usage/v1');
+  assert.match(measured.estate, /^est-[0-9a-f]{8}$/);
+  assert.equal(measured.tier, 'tier-2-insights');
+  assert.equal(measured.producer.name, 'avd-remediate');
+  assert.equal(measured.measurementGate.passed, true);
+  assert.equal(measured.groups.length, 1);
+
+  const grp = measured.groups[0];
+  const groupSchema = MeasuredSchema.properties.groups.items;
+  const allowedGroupKeys = new Set(Object.keys(groupSchema.properties));
+  for (const k of Object.keys(grp)) {
+    assert.ok(allowedGroupKeys.has(k), `Unexpected measured-usage group property: ${k}`);
+  }
+  for (const reqKey of groupSchema.required) {
+    assert.ok(grp[reqKey] !== undefined, `Missing required measured-usage group property: ${reqKey}`);
+  }
+  assert.match(grp.id, /^grp-[0-9]{2,4}$/);
+  assert.match(grp.sourcePoolId, /^(hp|src)-[0-9a-f]{8}$/);
+  assert.equal(grp.hourlyConcurrency.length, 24);
+});
+

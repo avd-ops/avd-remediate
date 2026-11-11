@@ -3309,6 +3309,74 @@
       "privacy": "public",
       "status": "built",
       "evidences": []
+    },
+    {
+      "id": "c12.group.perUser.steadyStateIopsP95",
+      "tier": "forensic",
+      "contract": "C12",
+      "path": "/groups/*/steadyStateIopsPerUser/p95",
+      "grain": "group",
+      "unit": "iops",
+      "privacy": "group-behavior",
+      "status": "specified",
+      "evidences": [
+        "hostPool.profileQuotaGiB"
+      ]
+    },
+    {
+      "id": "c12.group.profile.dailyChurnPercent",
+      "tier": "forensic",
+      "contract": "C12",
+      "path": "/groups/*/dailyProfileChurnPercent",
+      "grain": "group",
+      "unit": "%",
+      "privacy": "group-behavior",
+      "status": "specified",
+      "evidences": [
+        "hostPool.profileQuotaGiB"
+      ]
+    },
+    {
+      "id": "c12.group.perUser.gpuRequired",
+      "tier": "forensic",
+      "contract": "C12",
+      "path": "/groups/*/gpuRequired",
+      "grain": "group",
+      "unit": "bool",
+      "privacy": "boolean",
+      "status": "specified",
+      "evidences": [
+        "hostPool.vmSize",
+        "hostPool.type"
+      ]
+    },
+    {
+      "id": "c12.group.perUser.needsLocalAdmin",
+      "tier": "forensic",
+      "contract": "C12",
+      "path": "/groups/*/needsLocalAdmin",
+      "grain": "group",
+      "unit": "bool",
+      "privacy": "boolean",
+      "status": "specified",
+      "evidences": [
+        "hostPool.type",
+        "identity"
+      ]
+    },
+    {
+      "id": "c12.group.sharedBackendIds",
+      "tier": "forensic",
+      "contract": "C12",
+      "path": "/groups/*/sharedBackendIds",
+      "grain": "group",
+      "unit": "list",
+      "privacy": "pseudonym",
+      "status": "specified",
+      "evidences": [
+        "region",
+        "network"
+      ]
     }
   ]
 }

@@ -440,6 +440,9 @@ export function createRemediationServer(options = {}) {
       const explicitC25 = check.ok && check.exists
         ? findLatestJson(check.resolvedPath, (o) => o && (o.contract === 'C25' || o.schema === 'avd-benchmark-result/v1' || (o.verdict && o.metrics)))
         : null;
+      const explicitMeasuredUsage = check.ok && check.exists
+        ? findLatestJson(check.resolvedPath, (o) => o && (o.schema === 'avd-measured-usage/v1' || (o.measurementGate && Array.isArray(o.groups))))
+        : null;
       const explicitGraph = check.ok && check.exists
         ? findLatestJson(check.resolvedPath, (o, name) => o && (o.schema === 'family-graph-report/v1' || (o.graph && o.graph.schema === 'family-graph/v1') || /family-graph/i.test(name)))
         : null;
@@ -466,6 +469,7 @@ export function createRemediationServer(options = {}) {
         c11: (explicitC11 && explicitC11.data) || (vault && vault.derivedC11) || null,
         c21: (explicitC21 && explicitC21.data) || null,
         c25: (explicitC25 && explicitC25.data) || null,
+        measuredUsage: (explicitMeasuredUsage && explicitMeasuredUsage.data) || null,
         familyGraph: (explicitGraph && explicitGraph.data) || null,
         vault: vault ? {
           envName: vault.envName,
@@ -783,6 +787,59 @@ export function createRemediationServer(options = {}) {
           ].join('\n');
           fs.writeFileSync(path.join(inboxDir, `incident-${dateOnly}-${slug}.md`), inboxNote, 'utf8');
           return sendJson(res, 200, { ok: true, envName: resolvedEnvName, savedTo: filePath });
+        } catch (e) {
+          return sendJson(res, 400, { ok: false, error: String(e.message || e) });
+        }
+      }
+
+      if (url.pathname === '/api/telemetry/export') {
+        try {
+          const body = await readJsonBody(req);
+          const targetVault = String(body.vaultPath || body.sandboxPath || defaultVault);
+          const check = verifyPrivateVault(targetVault);
+          if (!check.ok) {
+            return sendJson(res, 400, { ok: false, error: check.reason });
+          }
+          const vault = check.exists ? loadEstateVault(check.resolvedPath, body.envName || preferredEnv) : null;
+          const resolvedEnvName = body.envName || (vault && vault.envName) || preferredEnv || 'contoso-avd-prod';
+          const c25 = Core.buildC25BenchmarkResult({
+            ...body,
+            c11: body.c11 || (vault && vault.derivedC11) || null
+          });
+          const measuredUsage = Core.buildMeasuredUsage({
+            ...body,
+            c11: body.c11 || (vault && vault.derivedC11) || null,
+            c25
+          });
+          const outDir = path.join(check.resolvedPath, 'environments', resolvedEnvName, 'telemetry');
+          fs.mkdirSync(outDir, { recursive: true });
+          const c25Path = path.join(outDir, 'benchmark-c25.json');
+          const measuredUsagePath = path.join(outDir, 'measured-usage.json');
+          fs.writeFileSync(c25Path, JSON.stringify(c25, null, 2) + '\n', 'utf8');
+          fs.writeFileSync(measuredUsagePath, JSON.stringify(measuredUsage, null, 2) + '\n', 'utf8');
+          const stateLine = {
+            v: 1,
+            stage: 'host-telemetry',
+            mode: body.mode || 'OfflineVault',
+            environment: resolvedEnvName,
+            profileId: c25.profile.id,
+            workloadClass: c25.profile.workloadClass,
+            vmSku: c25.environment.vmSku,
+            status: c25.verdict.experienceGate,
+            measurementGate: measuredUsage.measurementGate.passed ? 'pass' : 'warn',
+            c25Path,
+            measuredUsagePath,
+            summary: `Exported Contract C25 (${c25.verdict.experienceGate}) and avd-measured-usage/v1 (${measuredUsage.measurementGate.daysObserved}d, ${measuredUsage.measurementGate.coveragePercent}% coverage) to ${outDir}.`
+          };
+          return sendJson(res, 200, {
+            ok: true,
+            envName: resolvedEnvName,
+            c25,
+            measuredUsage,
+            c25Path,
+            measuredUsagePath,
+            state: stateLine
+          });
         } catch (e) {
           return sendJson(res, 400, { ok: false, error: String(e.message || e) });
         }

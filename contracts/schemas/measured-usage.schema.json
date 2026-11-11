@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assess.avd-ops.dev/schemas/avd-measured-usage/v1.json",
+  "title": "avd-measured-usage/v1: pseudonymous per-group and per-pool measured demand",
+  "description": "Foundation contract for measured desktop usage. Produced by Export-AvdInsightsUsage.ps1 (tier-2-insights) or an external telemetry producer (tier-3-external). Holds percentiles and aggregates by pseudonymous group or source pool; never holds user, machine, domain, IP or resource names.",
+  "type": "object",
+  "required": [
+    "schema",
+    "estate",
+    "generatedUtc",
+    "tier",
+    "producer",
+    "measurementGate",
+    "groups"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "region": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{2,40}$"
+    },
+    "percentiles": {
+      "type": ["object", "null"],
+      "required": ["p50", "p95"],
+      "additionalProperties": false,
+      "properties": {
+        "p50": { "type": "number", "minimum": 0 },
+        "p95": { "type": "number", "minimum": 0 },
+        "p99": { "type": "number", "minimum": 0 }
+      }
+    }
+  },
+  "properties": {
+    "schema": {
+      "const": "avd-measured-usage/v1"
+    },
+    "estate": {
+      "type": "string",
+      "pattern": "^est-[0-9a-f]{8}$"
+    },
+    "generatedUtc": {
+      "$ref": "#/$defs/utc"
+    },
+    "tier": {
+      "enum": ["tier-2-insights", "tier-3-external"]
+    },
+    "producer": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{2,64}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "measurementGate": {
+      "type": "object",
+      "required": ["windowStart", "windowEnd", "daysObserved", "coveragePercent", "peakIncluded", "passed"],
+      "additionalProperties": false,
+      "properties": {
+        "windowStart": { "$ref": "#/$defs/date" },
+        "windowEnd": { "$ref": "#/$defs/date" },
+        "daysObserved": { "type": "integer", "minimum": 1 },
+        "coveragePercent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "peakIncluded": { "type": "boolean" },
+        "passed": { "type": "boolean" }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "sourcePoolId",
+          "userCount",
+          "peakConcurrency",
+          "hourlyConcurrency",
+          "cpuPerUserCores",
+          "memoryPerUserGiB",
+          "steadyStateIopsPerUser",
+          "logonStormIopsPerUser",
+          "profileSizeGiB",
+          "logonDurationSeconds",
+          "rttMsByRegion"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^grp-[0-9]{2,4}$"
+          },
+          "sourcePoolId": {
+            "type": "string",
+            "pattern": "^(hp|src)-[0-9a-f]{8}$"
+          },
+          "userCount": {
+            "type": "integer",
+            "minimum": 10,
+            "description": "Minimum 10 users per pseudonymous group per privacy and avd-assess use-case floor"
+          },
+          "peakConcurrency": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "hourlyConcurrency": {
+            "type": "array",
+            "minItems": 24,
+            "maxItems": 24,
+            "items": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "cpuPerUserCores": { "$ref": "#/$defs/percentiles" },
+          "memoryPerUserGiB": { "$ref": "#/$defs/percentiles" },
+          "steadyStateIopsPerUser": { "$ref": "#/$defs/percentiles" },
+          "logonStormIopsPerUser": { "$ref": "#/$defs/percentiles" },
+          "profileSizeGiB": { "$ref": "#/$defs/percentiles" },
+          "dailyProfileChurnPercent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "logonDurationSeconds": { "$ref": "#/$defs/percentiles" },
+          "experienceScore": { "$ref": "#/$defs/percentiles" },
+          "gpuRequired": { "type": "boolean" },
+          "needsLocalAdmin": { "type": "boolean" },
+          "rttMsByRegion": {
+            "type": "object",
+            "propertyNames": { "$ref": "#/$defs/region" },
+            "additionalProperties": { "$ref": "#/$defs/percentiles" }
+          },
+          "appFingerprint": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+            },
+            "description": "Catalog app IDs observed in this group"
+          },
+          "sharedBackendIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^dep-[0-9]{2,4}$"
+            },
+            "description": "Pseudonymous shared backend/department dependency IDs for wave affinity"
+          }
+        }
+      }
+    }
+  }
+}
