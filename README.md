@@ -5,10 +5,10 @@ Part of [avd-ops](https://avd-ops.dev/), the open toolkit for Azure Virtual Desk
 A native Azure Virtual Desktop troubleshooting, diagnosis, host-level telemetry collection, and remediation workbench in the `avd-ops` toolset. It combines a 5-step guided portal (`site/portal/`) in the `avd-ops` design system with a hybrid deterministic + BYO-LLM troubleshooting chatbot, grounded in `avd-assess` standards, `avd-current-state` facts (`C11`, `C21`, `C24`), `avd-second-brain` known errors, and any adopter's private companion estate vault (`--vault ../avd-vault`).
 
 > [!WARNING]
-> **Personal project. Research and learning only. Not for production. No warranty.**
+> **Community research project. Use at your own risk. No warranty.**
 >
 > - This is my own personal project, built on my own time **for research and learning**. It is **not affiliated with, endorsed by or supported by my employer, Liquidware or Microsoft**, and it does not represent their views, products or guidance. It is not an official Microsoft product, and it is not a certified or supported tool.
-> - **Don't run any of it in production** or against tenants that matter. Test in a dedicated lab subscription and tenant first. Output is not a production-readiness certification, a compliance attestation or a security audit.
+> - Test it first in a dedicated lab subscription and tenant before using it in production; you are responsible for reviewing the code and validating it for your environment.
 > - It is provided **"as is", without warranty of any kind**, under the [MIT License](LICENSE). You use it at your own risk and own the Azure charges it incurs.
 > - **Contributions and forks are welcome and encouraged.**
 
@@ -68,7 +68,7 @@ Open `http://127.0.0.1:8787/portal/` (or use Cloud Shell's **Web preview** on po
 - **`avd-second-brain`**: `contracts/workload-tiers.json` (per-user vCPU, RAM, IOPS, and network budgets) and `contracts/calibration.json` (logon p95 <= 30s and RTT p95 <= 100ms envelopes).
 - **`avd-current-state`**: `contracts/lz-parameters.json` (canonical `C11` fact-to-Bicep parameter map) and `C11` / `C21` / `C25` ingestion.
 - **`avd-landing-zone`**: `contracts/control-planes.json` (3-stage `Invoke-AvdControlPlanes.ps1` orchestration across `avd-entra`, `avd-intune`, `avd-m365`, `avd-azure`, and `avd-power-platform`).
-- **`avd-swarm`**: `catalog/actions/*.yml` (`host.drain`, `host.restart-agent`, `host.reregister`, `host.recycle-empty`, `host.resume`, `host.stop`) with all 9 mandatory §5a preconditions and `catalog/queries/wvd-*.kql`.
+- **`avd-swarm`**: `catalog/actions/*.yml` (`host.drain`, `host.restart-agent`, `host.reregister`, `host.recycle-empty`, `host.resume`, `host.stop`) with all 9 mandatory Â§5a preconditions and `catalog/queries/wvd-*.kql`.
 - **`avd-benchmark`**: `avd-benchmark-result/v1` (`C25`) p95 logon, profile attach, storage latency, RTT, and host CPU/RAM pressure metrics.
 
 ## Documentation & tests
