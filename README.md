@@ -12,6 +12,18 @@ A native Azure Virtual Desktop troubleshooting, diagnosis, host-level telemetry 
 > - It is provided **"as is", without warranty of any kind**, under the [MIT License](LICENSE). You use it at your own risk and own the Azure charges it incurs.
 > - **Contributions and forks are welcome and encouraged.**
 
+## How it connects
+
+| Direction | Repo | Relationship |
+|---|---|---|
+| Front door | [avd-ops](https://github.com/avd-ops/avd-ops#readme) | Overview and [repo page](https://avd-ops.dev/docs/repos/avd-remediate.html) |
+| Upstream | [avd-current-state](https://github.com/avd-ops/avd-current-state#readme) | Supplies `C11` facts and `C21` assessment reports |
+| Upstream | [avd-assess](https://github.com/avd-ops/avd-assess#readme) | Supplies `ref:`/`obs:` claims and `C24` remediation schemas |
+| Upstream | [avd-linecheck](https://github.com/avd-ops/avd-linecheck#readme) | Supplies client-side browser network check bundles |
+| Downstream | [avd-landing-zone](https://github.com/avd-ops/avd-landing-zone#readme) | Receives `C24` parameter patches across the 5 control planes |
+| Downstream | [avd-benchmark](https://github.com/avd-ops/avd-benchmark#readme) | Consumes exported `C25` host telemetry (`Export-AvdHostTelemetry.ps1`) |
+| Intelligence | [avd-second-brain](https://github.com/avd-ops/avd-second-brain#readme) / [avd-swarm](https://github.com/avd-ops/avd-swarm#readme) | Known errors, workload calibration, and approved action handoffs |
+
 ## Quick start (Azure Cloud Shell or local machine)
 
 ```powershell
