@@ -75,10 +75,10 @@ $resolvedSnapshot = if ($SnapshotPath) {
 $planeRunbookSteps = switch ($pb.id) {
     'pb-fsx-kerberos-smb-auth' {
         [ordered]@{
-            preflightCheck = 'GET storageAccount.azureFilesIdentityBasedAuthentication.smbOAuthSettings & directoryServiceOptions; verify channelEncryption'
+            preflightCheck = 'GET storageAccount.azureFilesIdentityBasedAuthentication.smbOAuthSettings & directoryServiceOptions; run AzFileDiagnostics (Azure-Samples/azure-files-samples) TCP 445/SMB check and verify channelEncryption'
             applyAction    = 'Update Azure Files SMB channelEncryption to AES-128-GCM;AES-256-GCM (CCM off) and consent Graph User.Read on storage service principal'
             rollbackAction = 'Restore prior SMB channelEncryption and servicePrincipal oauth2PermissionGrants from rollback snapshot'
-            verifyCheck    = 'Verify channelEncryption includes AES-128-GCM and storage service principal holds User.Read grant'
+            verifyCheck    = 'Verify channelEncryption includes AES-128-GCM, AzFileDiagnostics SMB check passes, and storage service principal holds User.Read grant'
         }
     }
     'pb-conn-shortpath-blocked' {
@@ -111,6 +111,14 @@ $planeRunbookSteps = switch ($pb.id) {
             applyAction    = 'Log off stale disconnected session and assign Intune disconnected/idle session time limit policy'
             rollbackAction = 'Restore previous Intune session time limit policy assignment'
             verifyCheck    = 'Verify 0 stale VHDX open handles and Intune session limit policy assigned'
+        }
+    }
+    'pb-fsx-storage-throttling' {
+        [ordered]@{
+            preflightCheck = 'Run probe-fsx-storage-latency, check Azure Monitor Community StorageFileLogs/Perf KQL, and snapshot FSLogix VHDX sizes before Invoke-FslShrinkDisk (FSLogix/Invoke-FslShrinkDisk)'
+            applyAction    = 'Apply M365 Outlook cached mode sync window baseline via Intune Settings Catalog and run offline Invoke-FslShrinkDisk compaction on unmounted FSLogix VHDX containers'
+            rollbackAction = 'Revert Settings Catalog policy to previous revision (VHDX compaction is non-destructive; restore from Azure Backup snapshot if needed)'
+            verifyCheck    = 'Re-run probe-fsx-storage-latency and confirm Azure Files latency and reclaimed VHDX capacity'
         }
     }
     default {

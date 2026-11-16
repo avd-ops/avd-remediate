@@ -52,7 +52,18 @@
       "method": "GET",
       "command": "az monitor log-analytics query",
       "kqlTables": ["WVDConnections", "StorageFileLogs"],
-      "facts": ["c11.intune.sessionTimeLimitsConfigured"]
+      "facts": ["c11.intune.sessionTimeLimitsConfigured"],
+      "upstreamRef": "microsoft/AzureMonitorCommunity"
+    },
+    "probe-fsx-smb-diagnostics": {
+      "plane": "azure",
+      "domain": "fslogix",
+      "transport": "azfile-diagnostics",
+      "method": "GET",
+      "command": "Test-NetConnection",
+      "uriPattern": "https://*.file.core.windows.net:445",
+      "facts": ["c11.entra.kerberosStoragePrincipalsReady", "c11.intune.fslogixProfileConfigured"],
+      "upstreamRef": "Azure-Samples/azure-files-samples"
     },
     "probe-fsx-storage-latency": {
       "plane": "azure",
