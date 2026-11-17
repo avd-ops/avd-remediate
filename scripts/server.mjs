@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { queryMechanicalSources } from './source-queries.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -39,7 +40,9 @@ function parseArgs(argv) {
     host: '127.0.0.1',
     vaultPath: defaultVault,
     sandboxPath: defaultVault,
-    envName: process.env.AVD_ENV_NAME || ''
+    envName: process.env.AVD_ENV_NAME || '',
+    assessPath: process.env.AVD_ASSESS_PATH || '../avd-assess',
+    secondBrainPath: process.env.AVD_SECOND_BRAIN_PATH || '../avd-second-brain'
   };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === '--port' && argv[i + 1]) {
@@ -50,6 +53,10 @@ function parseArgs(argv) {
       opts.sandboxPath = val;
     } else if (argv[i] === '--env' && argv[i + 1]) {
       opts.envName = String(argv[++i]);
+    } else if (argv[i] === '--assess' && argv[i + 1]) {
+      opts.assessPath = String(argv[++i]);
+    } else if (argv[i] === '--second-brain' && argv[i + 1]) {
+      opts.secondBrainPath = String(argv[++i]);
     }
   }
   return opts;
@@ -421,6 +428,12 @@ export function createRemediationServer(options = {}) {
   const csrfToken = crypto.randomBytes(16).toString('hex');
   const defaultVault = options.vaultPath || options.sandboxPath || resolveDefaultVaultPath();
   const preferredEnv = options.envName || process.env.AVD_ENV_NAME || '';
+  const assessDir = path.resolve(ROOT, options.assessPath || process.env.AVD_ASSESS_PATH || '../avd-assess');
+  const secondBrainDir = path.resolve(ROOT, options.secondBrainPath || process.env.AVD_SECOND_BRAIN_PATH || '../avd-second-brain');
+  const learnEnabled = options.learnSearch !== undefined
+    ? Boolean(options.learnSearch)
+    : String(process.env.AVD_LEARN_SEARCH || '1').trim() !== '0';
+  const learnFetch = options.learnFetch || globalThis.fetch;
   const llmEnv = options.llmEnv || process.env;
   const llmFetch = options.llmFetch || globalThis.fetch;
 
@@ -466,6 +479,11 @@ export function createRemediationServer(options = {}) {
           keyConfigured: llmCfg.keyConfigured,
           modeLabel: llmCfg.modeLabel
         },
+        sources: {
+          assess: { available: fs.existsSync(assessDir), path: assessDir },
+          secondBrain: { available: fs.existsSync(secondBrainDir), path: secondBrainDir },
+          microsoftLearn: { enabled: learnEnabled }
+        },
         c11: (explicitC11 && explicitC11.data) || (vault && vault.derivedC11) || null,
         c21: (explicitC21 && explicitC21.data) || null,
         c25: (explicitC25 && explicitC25.data) || null,
@@ -504,6 +522,21 @@ export function createRemediationServer(options = {}) {
           const reply = Core.answerChat(body.question || '', chatCtx);
           const promptBundle = Core.buildRedactedLlmPrompt(body.question || '', chatCtx, reply);
           reply.redaction = promptBundle.redaction;
+
+          const sources = await queryMechanicalSources(body.question || '', promptBundle.redactedQuestion, {
+            assessDir,
+            secondBrainDir,
+            learnEnabled,
+            learnFetch
+          });
+          for (const line of sources.citationLines) {
+            if (!reply.citations.includes(line)) reply.citations.push(line);
+          }
+          reply.sourceHits = {
+            assess: sources.assess.hits,
+            secondBrain: sources.secondBrain.hits,
+            microsoftLearn: sources.microsoftLearn.hits
+          };
 
           const llmCfg = resolveLlmConfig(llmEnv);
           reply.llmEnabled = llmCfg.enabled;
