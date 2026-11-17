@@ -201,7 +201,8 @@ test('BYO-LLM adapter in /api/chat scrubs all tenant data before outbound call, 
     assert.equal(statusJson.llm.enabled, true);
     assert.equal(statusJson.llm.provider, 'ollama');
 
-    const chatRes = await fetch(`${base}/api/chat`, {
+    // 1) Without synthesize: true, /api/chat stays at 0 tokens (deterministic-offline) and never calls llmFetch
+    const detRes = await fetch(`${base}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-AVD-CSRF': statusJson.csrfToken },
       body: JSON.stringify({
@@ -214,9 +215,31 @@ test('BYO-LLM adapter in /api/chat scrubs all tenant data before outbound call, 
         }
       })
     });
+    assert.equal(detRes.status, 200);
+    const detJson = await detRes.json();
+    assert.equal(detJson.mode, 'deterministic-offline');
+    assert.equal(detJson.canSynthesize, true);
+    assert.equal(capturedLlmRequest, null, 'Expected 0-token deterministic path without synthesize: true');
+
+    // 2) With explicit synthesize: true, /api/chat invokes BYO-LLM with redacted payload
+    const chatRes = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-AVD-CSRF': statusJson.csrfToken },
+      body: JSON.stringify({
+        question: 'User jane@contoso.com on subscription 99999999-aaaa-bbbb-cccc-dddddddddddd from 203.0.113.99 got 0x0000052e on FSLogix',
+        c11: {
+          facts: {
+            'c11.entra.kerberosStoragePrincipalsReady': 0,
+            'c11.subscriptionId': '99999999-aaaa-bbbb-cccc-dddddddddddd'
+          }
+        },
+        synthesize: true
+      })
+    });
     assert.equal(chatRes.status, 200);
     const chatJson = await chatRes.json();
     assert.equal(chatJson.mode, 'byo-llm-redacted');
+    assert.equal(chatJson.unshieldedLocal, true);
     assert.equal(chatJson.llmProvider, 'ollama');
     assert.ok(capturedLlmRequest, 'Expected BYO-LLM adapter to invoke llmFetch');
 
@@ -228,13 +251,14 @@ test('BYO-LLM adapter in /api/chat scrubs all tenant data before outbound call, 
     assert.match(sentText, /<email-1>/);
     assert.match(sentText, /<id-1>/);
     assert.match(sentText, /<ip-1>/);
+    assert.match(sentText, /<<<UNTRUSTED_DATA>>>/);
 
     // Now simulate LLM failure -> automatic fallback to deterministic-offline
     shouldFailLlm = true;
     const fallbackRes = await fetch(`${base}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-AVD-CSRF': statusJson.csrfToken },
-      body: JSON.stringify({ question: 'FSLogix 0x0000052e' })
+      body: JSON.stringify({ question: 'FSLogix 0x0000052e', synthesize: true })
     });
     assert.equal(fallbackRes.status, 200);
     const fallbackJson = await fallbackRes.json();
@@ -377,4 +401,34 @@ test('loadEstateVault(), Invoke-AvdDiagnosticProbe.ps1, and Invoke-AvdRemediatio
   } finally {
     fs.rmSync(tmpVault, { recursive: true, force: true });
   }
+});
+
+test('4-stage assistant router enforces Stage 0 scope gate, Red Team no-pass-state, Chief of Staff local scope, and F4 verdict filter', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  globalThis.AvdOpsEngine = require(path.join(ROOT, 'site', 'assets', 'engine', 'core.js'));
+  globalThis.AvdOpsEngine.redact = require(path.join(ROOT, 'site', 'assets', 'engine', 'redact.js'));
+  const Core = require(path.join(ROOT, 'site', 'portal', 'remediate-core.js'));
+
+  const scopeOut = Core.answerChat('write a poem about clouds', {});
+  assert.equal(scopeOut.mode, 'scope-gate');
+  assert.equal(scopeOut.stage, 0);
+  assert.equal(scopeOut.tokens, 0);
+  assert.equal(scopeOut.canSynthesize, false);
+
+  const rt = Core.answerChat('FSLogix 0x0000052e', { assistantMode: 'red_team' });
+  assert.equal(rt.assistantMode, 'red_team');
+  assert.equal(rt.noPassState, true);
+  assert.match(rt.nextStep, /This is not a gate result\./);
+
+  const cos = Core.answerChat('FSLogix 0x0000052e', {
+    assistantMode: 'chief_of_staff',
+    c21: { checks: [{ id: 'asm-entra-files-kerberos-ready', outcome: 'gap' }] }
+  });
+  assert.equal(cos.assistantMode, 'chief_of_staff');
+  assert.match(cos.sourceBadge, /Local Estate/);
+  assert.match(cos.bottomLine, /asm-entra-files-kerberos-ready/);
+
+  assert.equal(Core.checkVerdictPhrase('This looks good and is safe to run.').ok, false);
+  assert.equal(Core.checkVerdictPhrase('Verify Kerberos encryption types in Step 2.').ok, true);
 });

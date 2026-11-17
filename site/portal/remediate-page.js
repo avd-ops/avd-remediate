@@ -138,6 +138,9 @@
     snapshotStale: false,
     snapshotRelPath: 'environments/contoso-avd-prod/snapshots/20261021T032412-inventory.json',
     latestBrief: null,
+    assistantMode: 'guru',
+    hasRecentInScope: false,
+    llmEnabled: false,
     llmModeLabel: 'Offline deterministic ($0, zero network)',
     serverOnline: false,
     csrfToken: '',
@@ -726,7 +729,7 @@
     }
   }
 
-  function appendChatMessage(role, contentObj) {
+  function appendChatMessage(role, contentObj, rawQuestion) {
     const log = $('chat-messages');
     if (role === 'user') {
       const msg = el('div', { className: 'chat-msg user', text: contentObj.text });
@@ -735,19 +738,54 @@
       return;
     }
 
-    const jumpProbeBtn = el('button', { type: 'button', className: 'secondary', text: 'Step 2: Run ' + contentObj.probeId });
-    jumpProbeBtn.addEventListener('click', function () {
-      state.playbookId = contentObj.playbookId;
-      renderPlaybookSelect();
-      setStep(1);
-    });
+    const actions = [];
+    if (contentObj.mode !== 'scope-gate') {
+      const jumpProbeBtn = el('button', { type: 'button', className: 'secondary', text: 'Step 2: Run ' + contentObj.probeId });
+      jumpProbeBtn.addEventListener('click', function () {
+        state.playbookId = contentObj.playbookId;
+        renderPlaybookSelect();
+        setStep(1);
+      });
 
-    const jumpFixBtn = el('button', { type: 'button', text: 'Step 4: ' + contentObj.plane + ' fix' });
-    jumpFixBtn.addEventListener('click', function () {
-      state.playbookId = contentObj.playbookId;
-      renderPlaybookSelect();
-      setStep(3);
-    });
+      const jumpFixBtn = el('button', { type: 'button', text: 'Step 4: ' + contentObj.plane + ' fix' });
+      jumpFixBtn.addEventListener('click', function () {
+        state.playbookId = contentObj.playbookId;
+        renderPlaybookSelect();
+        setStep(3);
+      });
+      actions.push(jumpProbeBtn, jumpFixBtn);
+    }
+
+    if (contentObj.canSynthesize && state.serverOnline && state.llmEnabled && contentObj.mode === 'deterministic-offline' && rawQuestion) {
+      const synthBtn = el('button', { type: 'button', className: 'secondary', text: 'Synthesize with AI' });
+      synthBtn.addEventListener('click', function () {
+        synthBtn.disabled = true;
+        synthBtn.textContent = 'Synthesizing...';
+        fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-AVD-CSRF': state.csrfToken },
+          body: JSON.stringify({
+            question: rawQuestion,
+            assistantMode: state.assistantMode,
+            hasRecentInScope: state.hasRecentInScope,
+            domain: state.domain,
+            playbookId: state.playbookId,
+            c11: state.c11,
+            c21: state.c21,
+            probeStates: state.probeStates,
+            synthesize: true
+          })
+        }).then(function (r) { return r.ok ? r.json() : null; }).then(function (srvReply) {
+          if (srvReply && srvReply.bottomLine) {
+            appendChatMessage('assistant', srvReply, rawQuestion);
+          }
+        }).catch(function () {
+          synthBtn.disabled = false;
+          synthBtn.textContent = 'Synthesize with AI';
+        });
+      });
+      actions.push(synthBtn);
+    }
 
     const citList = el('ul', null, (contentObj.citations || []).map(function (c) {
       return el('li', { text: c });
@@ -758,22 +796,31 @@
       citList
     ]);
 
-    const bodyNodes = [
-      el('p', { className: 'msg-bl', text: contentObj.bottomLine }),
-      el('p', { text: contentObj.nextStep })
-    ];
+    const bodyNodes = [];
+    if (contentObj.sourceBadge) {
+      bodyNodes.push(el('p', { className: 'msg-badge', text: contentObj.sourceBadge }));
+    }
+    bodyNodes.push(el('p', { className: 'msg-bl', text: contentObj.bottomLine }));
+    bodyNodes.push(el('p', { text: contentObj.nextStep }));
+    if (contentObj.verdictFiltered) {
+      bodyNodes.push(el('p', { className: 'muted', text: 'AI synthesis withheld by verdict-phrase guard (F4).' }));
+    }
     if (contentObj.llmSynthesis && contentObj.llmSynthesis !== contentObj.bottomLine) {
       bodyNodes.push(el('p', { className: 'muted', text: contentObj.llmSynthesis }));
     }
-    bodyNodes.push(el('div', { className: 'msg-actions' }, [jumpProbeBtn, jumpFixBtn]));
-    bodyNodes.push(details);
+    if (actions.length) {
+      bodyNodes.push(el('div', { className: 'msg-actions' }, actions));
+    }
+    if ((contentObj.citations || []).length > 0) {
+      bodyNodes.push(details);
+    }
 
     const msg = el('div', { className: 'chat-msg assistant' }, bodyNodes);
     log.appendChild(msg);
     log.scrollTop = log.scrollHeight;
 
     const modeLabel = contentObj.mode === 'byo-llm-redacted'
-      ? ('BYO-LLM (Redacted' + (contentObj.llmProvider ? ' · ' + contentObj.llmProvider : '') + ')')
+      ? ('Unshielded local BYO-LLM (Redacted' + (contentObj.llmProvider ? ' · ' + contentObj.llmProvider : '') + ')')
       : state.llmModeLabel;
     const redactSummary = (contentObj.redaction && contentObj.redaction.summary) || '';
     updateReasoningBadges(modeLabel, redactSummary);
@@ -787,6 +834,8 @@
     $('symptom-input').value = q;
 
     const reply = Core.answerChat(q, {
+      assistantMode: state.assistantMode,
+      hasRecentInScope: state.hasRecentInScope,
       domain: state.domain,
       c11: state.c11,
       c21: state.c21,
@@ -797,12 +846,15 @@
       playbookId: ''
     });
 
-    state.playbookId = reply.playbookId;
-    const pb = Core.PLAYBOOKS.find(function (p) { return p.id === reply.playbookId; });
-    if (pb) state.domain = pb.domain;
-    renderDomains();
-    renderPlaybookSelect();
-    refreshAll();
+    if (reply.mode !== 'scope-gate') {
+      state.hasRecentInScope = true;
+      state.playbookId = reply.playbookId;
+      const pb = Core.PLAYBOOKS.find(function (p) { return p.id === reply.playbookId; });
+      if (pb) state.domain = pb.domain;
+      renderDomains();
+      renderPlaybookSelect();
+      refreshAll();
+    }
 
     if (state.serverOnline) {
       fetch('/api/chat', {
@@ -810,27 +862,26 @@
         headers: { 'Content-Type': 'application/json', 'X-AVD-CSRF': state.csrfToken },
         body: JSON.stringify({
           question: q,
+          assistantMode: state.assistantMode,
+          hasRecentInScope: state.hasRecentInScope,
           domain: state.domain,
           playbookId: state.playbookId,
           c11: state.c11,
           c21: state.c21,
-          probeStates: state.probeStates
+          probeStates: state.probeStates,
+          synthesize: false
         })
       }).then(function (r) { return r.ok ? r.json() : null; }).then(function (srvReply) {
         if (srvReply && srvReply.bottomLine) {
-          const modeLabel = srvReply.mode === 'byo-llm-redacted'
-            ? ('BYO-LLM (Redacted' + (srvReply.llmProvider ? ' · ' + srvReply.llmProvider : '') + ')')
-            : 'Offline deterministic ($0, zero network)';
-          updateReasoningBadges(modeLabel, srvReply.redaction && srvReply.redaction.summary);
-          appendChatMessage('assistant', srvReply);
+          appendChatMessage('assistant', srvReply, q);
         } else {
-          appendChatMessage('assistant', reply);
+          appendChatMessage('assistant', reply, q);
         }
       }).catch(function () {
-        appendChatMessage('assistant', reply);
+        appendChatMessage('assistant', reply, q);
       });
     } else {
-      appendChatMessage('assistant', reply);
+      appendChatMessage('assistant', reply, q);
     }
   }
 
@@ -866,8 +917,11 @@
       if (info.envName) {
         state.envName = info.envName;
       }
-      if (info.llm && info.llm.modeLabel) {
-        updateReasoningBadges(info.llm.modeLabel, null);
+      if (info.llm) {
+        state.llmEnabled = Boolean(info.llm.enabled);
+        if (info.llm.modeLabel) {
+          updateReasoningBadges(info.llm.modeLabel, null);
+        }
       }
       const pill = $('sandbox-mode-pill');
       const vaultExists = Boolean(info.vaultExists ?? info.sandboxExists);
@@ -1325,6 +1379,18 @@
     });
     $('chat-close-btn').addEventListener('click', function () { setChatOpen(false); });
     $('chat-backdrop').addEventListener('click', function () { setChatOpen(false); });
+
+    document.querySelectorAll('.mode-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        const mode = chip.getAttribute('data-mode') || 'guru';
+        state.assistantMode = mode;
+        document.querySelectorAll('.mode-chip').forEach(function (c) {
+          const active = c === chip;
+          c.classList.toggle('active', active);
+          c.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      });
+    });
 
     document.querySelectorAll('.prompt-chip').forEach(function (chip) {
       chip.addEventListener('click', function () {
