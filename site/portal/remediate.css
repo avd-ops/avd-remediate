@@ -285,6 +285,44 @@ html {
   margin: 0;
 }
 
+.portal .chat-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.portal .chat-modes {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sunken);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.portal .mode-chip {
+  padding: 4px 10px;
+  font-size: .74rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.portal .mode-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.portal .msg-badge {
+  font-size: .72rem;
+  font-family: var(--mono);
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
 .portal .chat-privacy {
   padding: 8px 16px;
   border-bottom: 1px solid var(--line);

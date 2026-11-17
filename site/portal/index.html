@@ -443,14 +443,22 @@
   </main>
 
   <!-- DOCKED / SLIDE-OVER CHAT ASSISTANT DRAWER -->
-  <aside class="chat-drawer" id="chat-drawer" aria-label="Troubleshooting Chat Assistant">
+  <aside class="chat-drawer" id="chat-drawer" aria-label="Assistant">
     <div class="chat-head">
-      <h2>Troubleshooting assistant</h2>
+      <span class="chat-brand">
+        <img src="../assets/brand/avd-assistant-icon.svg" alt="" width="22" height="22">
+        <h2>Assistant</h2>
+      </span>
       <button type="button" class="linkbtn" id="chat-close-btn" aria-label="Close assistant">Close</button>
     </div>
     <div class="chat-privacy">
       <span id="chat-mode-badge">Offline deterministic ($0, zero network)</span>
       <span id="chat-redact-badge">Redactor active</span>
+    </div>
+    <div class="chat-modes" role="group" aria-label="Assistant mode">
+      <button type="button" class="mode-chip active" data-mode="guru" aria-pressed="true">Guru</button>
+      <button type="button" class="mode-chip" data-mode="red_team" aria-pressed="false">Red Team</button>
+      <button type="button" class="mode-chip" data-mode="chief_of_staff" aria-pressed="false">Chief of Staff</button>
     </div>
     <div class="chat-messages" id="chat-messages" role="log" aria-live="polite"></div>
     <div class="chat-prompts" aria-label="Suggested questions">

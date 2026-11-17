@@ -506,15 +506,24 @@ export function createRemediationServer(options = {}) {
           reply.redaction = promptBundle.redaction;
 
           const llmCfg = resolveLlmConfig(llmEnv);
-          if (llmCfg.enabled) {
+          reply.llmEnabled = llmCfg.enabled;
+          if (llmCfg.enabled && body.synthesize === true && reply.canSynthesize !== false) {
             try {
               const llmAnswer = await callByoLlm(llmCfg, promptBundle, llmFetch);
+              const verdictCheck = Core.checkVerdictPhrase(llmAnswer);
+              if (!verdictCheck.ok) {
+                reply.verdictFiltered = true;
+                reply.verdictMatched = verdictCheck.matched;
+                return sendJson(res, 200, reply);
+              }
               const firstLine = llmAnswer.split('\n').map((s) => s.trim()).find(Boolean) || reply.bottomLine;
               return sendJson(res, 200, {
                 ...reply,
                 mode: 'byo-llm-redacted',
+                unshieldedLocal: true,
                 llmProvider: llmCfg.provider,
                 llmModel: llmCfg.model,
+                sourceBadge: 'Unshielded local BYO-LLM (redacted · ' + llmCfg.provider + ')',
                 bottomLine: firstLine,
                 llmSynthesis: llmAnswer,
                 redaction: promptBundle.redaction
