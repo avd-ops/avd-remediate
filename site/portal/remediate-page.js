@@ -819,9 +819,11 @@
     log.appendChild(msg);
     log.scrollTop = log.scrollHeight;
 
-    const modeLabel = contentObj.mode === 'byo-llm-redacted'
-      ? ('Unshielded local BYO-LLM (Redacted' + (contentObj.llmProvider ? ' · ' + contentObj.llmProvider : '') + ')')
-      : state.llmModeLabel;
+    const modeLabel = contentObj.mode === 'avd-assistant-redacted'
+      ? 'Connected avd-assistant (Redacted · Prompt Shields)'
+      : contentObj.mode === 'byo-llm-redacted'
+        ? ('Unshielded local BYO-LLM (Redacted' + (contentObj.llmProvider ? ' · ' + contentObj.llmProvider : '') + ')')
+        : state.llmModeLabel;
     const redactSummary = (contentObj.redaction && contentObj.redaction.summary) || '';
     updateReasoningBadges(modeLabel, redactSummary);
   }

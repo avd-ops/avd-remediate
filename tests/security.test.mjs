@@ -432,3 +432,69 @@ test('4-stage assistant router enforces Stage 0 scope gate, Red Team no-pass-sta
   assert.equal(Core.checkVerdictPhrase('This looks good and is safe to run.').ok, false);
   assert.equal(Core.checkVerdictPhrase('Verify Kerberos encryption types in Step 2.').ok, true);
 });
+
+test('connected avd-assistant adapter sends only redacted payload to /api/turns and fails closed on leak', async () => {
+  const { assertRedactedForExternal } = await import('../scripts/server.mjs');
+  assert.throws(() => assertRedactedForExternal('sub 99999999-aaaa-bbbb-cccc-dddddddddddd'), /GUID detected/);
+  assert.throws(() => assertRedactedForExternal('\\\\fs01.contoso.com\\profiles'), /UNC path detected/);
+  assert.doesNotThrow(() => assertRedactedForExternal('Enable AES-256 on <id-1> for <email-1> from <ip-1>'));
+
+  const tmpDir = fs.mkdtempSync(path.join(ROOT, 'tmp-swarm-'));
+  let capturedTurnReq = null;
+  const mockSwarmFetch = async (url, init) => {
+    capturedTurnReq = { url, headers: init.headers, body: JSON.parse(init.body) };
+    return {
+      ok: true,
+      status: 202,
+      async json() {
+        return {
+          turn: {
+            turnId: 'turn-1',
+            answer: 'Bottom line: Check Kerberos encryption types on <id-1> (pb-fsx-kerberos-smb-auth).'
+          }
+        };
+      }
+    };
+  };
+
+  const srv = createRemediationServer({
+    sandboxPath: tmpDir,
+    llmEnv: {
+      AVD_LLM_PROVIDER: 'avd-assistant',
+      AVD_ASSISTANT_ENDPOINT: 'http://127.0.0.1:8080'
+    },
+    llmFetch: mockSwarmFetch
+  });
+
+  await new Promise((resolve) => srv.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    const statusRes = await fetch(`${base}/api/status`);
+    const statusJson = await statusRes.json();
+    assert.equal(statusJson.llm.enabled, true);
+    assert.equal(statusJson.llm.provider, 'avd-assistant');
+
+    const chatRes = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-AVD-CSRF': statusJson.csrfToken },
+      body: JSON.stringify({
+        question: 'User jane@contoso.com on 99999999-aaaa-bbbb-cccc-dddddddddddd got 0x0000052e',
+        assistantMode: 'guru',
+        synthesize: true
+      })
+    });
+    assert.equal(chatRes.status, 200);
+    const chatJson = await chatRes.json();
+    assert.equal(chatJson.mode, 'avd-assistant-redacted');
+    assert.equal(chatJson.unshieldedLocal, false);
+    assert.match(chatJson.sourceBadge, /Connected avd-assistant/);
+    assert.ok(capturedTurnReq);
+    assert.match(capturedTurnReq.url, /\/api\/turns$/);
+    const sent = JSON.stringify(capturedTurnReq.body);
+    assert.doesNotMatch(sent, /jane@contoso\.com/i);
+    assert.doesNotMatch(sent, /99999999-aaaa-bbbb-cccc-dddddddddddd/i);
+  } finally {
+    srv.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

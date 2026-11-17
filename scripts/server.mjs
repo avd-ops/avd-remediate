@@ -152,7 +152,7 @@ function classifyVaultNote(relPath, raw) {
 export function resolveLlmConfig(envInput = process.env) {
   const env = envInput || {};
   const rawProvider = String(env.AVD_LLM_PROVIDER || 'none').trim().toLowerCase();
-  const allowed = ['ollama', 'local-openai', 'github-models', 'azure-openai', 'openai', 'anthropic'];
+  const allowed = ['avd-assistant', 'ollama', 'local-openai', 'github-models', 'azure-openai', 'openai', 'anthropic'];
   const provider = allowed.includes(rawProvider) ? rawProvider : 'none';
   if (provider === 'none') {
     return {
@@ -166,6 +166,7 @@ export function resolveLlmConfig(envInput = process.env) {
   }
 
   const defaultEndpoints = {
+    'avd-assistant': '',
     ollama: 'http://127.0.0.1:11434/v1/chat/completions',
     'local-openai': 'http://127.0.0.1:11434/v1/chat/completions',
     'github-models': 'https://models.inference.ai.azure.com/chat/completions',
@@ -174,6 +175,7 @@ export function resolveLlmConfig(envInput = process.env) {
     'azure-openai': ''
   };
   const defaultModels = {
+    'avd-assistant': 'avd-assistant',
     ollama: 'llama3.2',
     'local-openai': 'llama3.2',
     'github-models': 'gpt-4o-mini',
@@ -182,11 +184,22 @@ export function resolveLlmConfig(envInput = process.env) {
     anthropic: 'claude-3-5-haiku-latest'
   };
 
-  const endpoint = String(env.AVD_LLM_ENDPOINT || defaultEndpoints[provider] || '').trim();
+  const endpoint = String(
+    (provider === 'avd-assistant' ? env.AVD_ASSISTANT_ENDPOINT : '') ||
+      env.AVD_LLM_ENDPOINT ||
+      defaultEndpoints[provider] ||
+      ''
+  ).trim();
   const model = String(env.AVD_LLM_MODEL || defaultModels[provider] || 'gpt-4o-mini').trim();
-  const apiKey = String(env.AVD_LLM_API_KEY || '').trim();
-  const isLocalKeyless = provider === 'ollama' || provider === 'local-openai';
+  const apiKey = String((provider === 'avd-assistant' ? env.AVD_ASSISTANT_TOKEN : '') || env.AVD_LLM_API_KEY || '').trim();
+  const isLocalKeyless = provider === 'ollama' || provider === 'local-openai' || provider === 'avd-assistant';
   const enabled = Boolean(endpoint && (isLocalKeyless || apiKey));
+
+  const modeLabel = !enabled
+    ? 'Offline deterministic ($0, zero network)'
+    : provider === 'avd-assistant'
+      ? 'Connected avd-assistant (Redacted + Prompt Shields)'
+      : `BYO-LLM (Redacted · ${provider})`;
 
   return {
     enabled,
@@ -195,8 +208,79 @@ export function resolveLlmConfig(envInput = process.env) {
     endpoint,
     apiKey,
     keyConfigured: Boolean(apiKey || isLocalKeyless),
-    modeLabel: enabled ? `BYO-LLM (Redacted · ${provider})` : 'Offline deterministic ($0, zero network)'
+    modeLabel
   };
+}
+
+export function assertRedactedForExternal(text) {
+  const s = String(text || '');
+  const leakPatterns = [
+    { name: 'GUID', re: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i },
+    { name: 'Email', re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/ },
+    { name: 'IPv4', re: /\b(?!127\.0\.0\.1\b|0\.0\.0\.0\b)(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/ },
+    { name: 'UNC path', re: /\\\\[A-Za-z0-9._-]+\\/ }
+  ];
+  for (const p of leakPatterns) {
+    if (p.re.test(s)) {
+      throw new Error(`Fail-closed leak check blocked outbound avd-assistant call (${p.name} detected).`);
+    }
+  }
+}
+
+async function callAvdAssistant(llmCfg, promptBundle, opts = {}, fetchImpl = globalThis.fetch) {
+  if (!llmCfg || !llmCfg.enabled || typeof fetchImpl !== 'function') {
+    throw new Error('avd-assistant adapter is not enabled.');
+  }
+  assertRedactedForExternal(promptBundle.redactedQuestion);
+  assertRedactedForExternal(promptBundle.userPrompt);
+
+  const baseEndpoint = llmCfg.endpoint.replace(/\/+$/, '');
+  const turnsUrl = baseEndpoint.endsWith('/api/turns') ? baseEndpoint : `${baseEndpoint}/api/turns`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (llmCfg.apiKey) {
+    headers.Authorization = `Bearer ${llmCfg.apiKey}`;
+  }
+
+  const payload = {
+    question: promptBundle.redactedQuestion,
+    mode: opts.assistantMode || 'guru',
+    idempotencyKey: opts.idempotencyKey || crypto.randomUUID(),
+    synthesize: true,
+    context: promptBundle.userPrompt
+  };
+
+  const res = await fetchImpl(turnsUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!res.ok) {
+    throw new Error(`avd-assistant endpoint returned HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  let turn = data.turn || data;
+
+  if (!turn.answer && !turn.bottomLine && (turn.turnId || data.turnId)) {
+    const tid = encodeURIComponent(String(turn.turnId || data.turnId));
+    const pollBase = turnsUrl.replace(/\/api\/turns$/, '');
+    const pollRes = await fetchImpl(`${pollBase}/api/turns/${tid}?after=0`, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(8000)
+    });
+    if (pollRes.ok) {
+      const pollData = await pollRes.json();
+      turn = pollData.turn || pollData;
+    }
+  }
+
+  const rawAnswer = String(turn.answer || turn.bottomLine || '').trim();
+  const cleanAnswer = Redact.maskSecrets(rawAnswer).text;
+  if (!cleanAnswer) {
+    throw new Error('Empty response from avd-assistant endpoint.');
+  }
+  return cleanAnswer;
 }
 
 async function callByoLlm(llmCfg, promptBundle, fetchImpl = globalThis.fetch) {
@@ -542,7 +626,10 @@ export function createRemediationServer(options = {}) {
           reply.llmEnabled = llmCfg.enabled;
           if (llmCfg.enabled && body.synthesize === true && reply.canSynthesize !== false) {
             try {
-              const llmAnswer = await callByoLlm(llmCfg, promptBundle, llmFetch);
+              const isSwarmAssistant = llmCfg.provider === 'avd-assistant';
+              const llmAnswer = isSwarmAssistant
+                ? await callAvdAssistant(llmCfg, promptBundle, { assistantMode: reply.assistantMode, idempotencyKey: body.idempotencyKey }, llmFetch)
+                : await callByoLlm(llmCfg, promptBundle, llmFetch);
               const verdictCheck = Core.checkVerdictPhrase(llmAnswer);
               if (!verdictCheck.ok) {
                 reply.verdictFiltered = true;
@@ -552,11 +639,13 @@ export function createRemediationServer(options = {}) {
               const firstLine = llmAnswer.split('\n').map((s) => s.trim()).find(Boolean) || reply.bottomLine;
               return sendJson(res, 200, {
                 ...reply,
-                mode: 'byo-llm-redacted',
-                unshieldedLocal: true,
+                mode: isSwarmAssistant ? 'avd-assistant-redacted' : 'byo-llm-redacted',
+                unshieldedLocal: !isSwarmAssistant,
                 llmProvider: llmCfg.provider,
                 llmModel: llmCfg.model,
-                sourceBadge: 'Unshielded local BYO-LLM (redacted · ' + llmCfg.provider + ')',
+                sourceBadge: isSwarmAssistant
+                  ? 'Connected avd-assistant (Redacted · Prompt Shields)'
+                  : 'Unshielded local BYO-LLM (redacted · ' + llmCfg.provider + ')',
                 bottomLine: firstLine,
                 llmSynthesis: llmAnswer,
                 redaction: promptBundle.redaction
