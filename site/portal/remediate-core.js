@@ -813,6 +813,42 @@
   }
 
   // Deterministic diagnosis across domain, symptom text, C11 facts, C21 report, C25 benchmark, measuredUsage, EstateGraph, and probe state lines.
+  const TEAMS_VDI_ERROR_MAP = {
+    '2000': 'VDI plugin missing or not loaded on endpoint (verify MsTeamsPluginAvd.dll in msrdc.exe and update Windows App)',
+    '16002': 'VDI plugin missing or not loaded on endpoint (verify MsTeamsPluginAvd.dll in msrdc.exe and update Windows App)',
+    '2003': 'Virtual channel allow list blocking Teams VDI connection',
+    '16026': 'Virtual channel allow list blocking Teams VDI connection',
+    '2005': 'Teams running as RemoteApp (SlimCore does not load for RemoteApps)',
+    '16043': 'Teams running as RemoteApp (SlimCore does not load for RemoteApps)',
+    '3002': 'Local SlimCore package failed to download or stage on endpoint',
+    '24018': 'Local SlimCore package failed to download or stage on endpoint',
+    '3004': 'SlimCore plugin unresponsive or busy staging (check AppXDeploymentServer/Operational)',
+    '24035': 'SlimCore plugin unresponsive or busy staging (check AppXDeploymentServer/Operational)',
+    '16389': 'SlimCore MSIX installation blocked by endpoint policy (BlockNonAdminUserInstall / AppLocker / WDAC)'
+  };
+
+  function parseTeamsVdiDebug(text) {
+    const raw = String(text || '');
+    if (!raw) return { codes: [], findings: [] };
+    const re = /\b(loadErrc|deployErrc)\s*[:=]\s*(\d{4,5})\b/gi;
+    const seen = {};
+    const findings = [];
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      const field = m[1];
+      const code = m[2];
+      const key = field.toLowerCase() + ':' + code;
+      if (seen[key]) continue;
+      seen[key] = true;
+      const summary = TEAMS_VDI_ERROR_MAP[code] || 'Teams VDI SlimCore diagnostic error';
+      findings.push({ field: field, code: code, summary: summary });
+    }
+    return {
+      codes: findings.map(function (f) { return f.code; }),
+      findings: findings
+    };
+  }
+
   function diagnose(input) {
     const o = input || {};
     const domain = o.domain || '';
@@ -836,11 +872,18 @@
 
     const graphRootPaths = (familyGraph && Array.isArray(familyGraph.rootCausePaths)) ? familyGraph.rootCausePaths : [];
     const graphBlastRadius = (familyGraph && familyGraph.blastRadius) ? familyGraph.blastRadius : null;
+    const vdiDebug = parseTeamsVdiDebug(o.query || '');
 
     const scored = PLAYBOOKS.map(function (pb) {
       let score = 0;
       const signals = [];
 
+      if (pb.id === 'pb-m365-teams-slimcore-not-optimized' && vdiDebug.findings.length > 0) {
+        vdiDebug.findings.forEach(function (f) {
+          score += 25;
+          signals.push('Teams vdi_debug ' + f.field + '=' + f.code + ': ' + f.summary);
+        });
+      }
       if (selectedPlaybookId && pb.id === selectedPlaybookId) {
         score += 50;
         signals.push('Selected directly by operator');
@@ -2141,6 +2184,7 @@
     evaluateBenchmark: evaluateBenchmark,
     evaluateMeasuredUsage: evaluateMeasuredUsage,
     parseStateLines: parseStateLines,
+    parseTeamsVdiDebug: parseTeamsVdiDebug,
     diagnose: diagnose,
     probeCommand: probeCommand,
     remediationCommand: remediationCommand,
