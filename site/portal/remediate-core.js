@@ -849,6 +849,42 @@
     };
   }
 
+  function evaluateLocalBundle(pb, bundle) {
+    let score = 0;
+    const signals = [];
+    if (!bundle || pb.id !== 'pb-m365-teams-slimcore-not-optimized') {
+      return { score: 0, signals: [] };
+    }
+    const reg = bundle.registry || {};
+    const teamsReg = reg['session.teams-media-flag'] || reg['host.teams-media'] || null;
+    if (teamsReg && teamsReg.IsWVDEnvironment !== 1) {
+      score += 30;
+      signals.push('Local bundle registry.json: IsWVDEnvironment is ' + JSON.stringify(teamsReg.IsWVDEnvironment) + ' (expected 1)');
+    }
+    const appxReg = reg['device.appx-nonadmin-policy'] || null;
+    if (appxReg && appxReg.BlockNonAdminUserInstall === 1) {
+      score += 30;
+      signals.push('Local bundle registry.json: BlockNonAdminUserInstall=1 (blocks SlimCore MSIX)');
+    }
+    const events = bundle.events || {};
+    const appxEvents = Array.isArray(events['device.appx-deployment-events']) ? events['device.appx-deployment-events'] : [];
+    const errorEvents = appxEvents.filter(function (e) {
+      return e && (e.LevelDisplayName === 'Error' || e.LevelDisplayName === 'Warning');
+    });
+    if (errorEvents.length > 0) {
+      score += 20;
+      signals.push('Local bundle events.json: AppXDeploymentServer reported ' + errorEvents.length + ' warning/error event(s)');
+    }
+    if (bundle.vdiDebugText) {
+      const parsed = parseTeamsVdiDebug(bundle.vdiDebugText);
+      parsed.findings.forEach(function (f) {
+        score += 25;
+        signals.push('Local bundle vdi_debug ' + f.field + '=' + f.code + ': ' + f.summary);
+      });
+    }
+    return { score: score, signals: signals };
+  }
+
   function diagnose(input) {
     const o = input || {};
     const domain = o.domain || '';
@@ -857,6 +893,7 @@
     const c21 = o.c21 || null;
     const c25 = o.c25 || null;
     const measuredUsage = o.measuredUsage || null;
+    const localBundle = o.localBundle || null;
     const familyGraph = o.familyGraph || null;
     const probeStates = Array.isArray(o.probeStates) ? o.probeStates : [];
     const selectedPlaybookId = o.playbookId || '';
@@ -923,6 +960,11 @@
         const muEval = evaluateMeasuredUsage(pb, measuredUsage);
         score += muEval.score;
         muEval.signals.forEach(function (s) { signals.push(s); });
+      }
+      if (localBundle) {
+        const lbEval = evaluateLocalBundle(pb, localBundle);
+        score += lbEval.score;
+        lbEval.signals.forEach(function (s) { signals.push(s); });
       }
       if (graphRootPaths.length > 0) {
         const topRc = graphRootPaths[0];
@@ -2183,6 +2225,7 @@
     readFact: readFact,
     evaluateBenchmark: evaluateBenchmark,
     evaluateMeasuredUsage: evaluateMeasuredUsage,
+    evaluateLocalBundle: evaluateLocalBundle,
     parseStateLines: parseStateLines,
     parseTeamsVdiDebug: parseTeamsVdiDebug,
     diagnose: diagnose,
