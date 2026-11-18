@@ -120,6 +120,7 @@
     c21: null,
     c25: null,
     measuredUsage: null,
+    localBundle: null,
     familyGraph: null,
     probeStates: [],
     verifyState: null,
@@ -262,6 +263,7 @@
       c21: state.c21,
       c25: state.c25,
       measuredUsage: state.measuredUsage,
+      localBundle: state.localBundle,
       familyGraph: state.familyGraph,
       probeStates: state.probeStates,
       playbookId: state.playbookId
@@ -1064,14 +1066,27 @@
               state.measuredUsage = parsed;
             } else if (parsed.schema === 'family-graph-report/v1' || (parsed.graph && parsed.graph.schema === 'family-graph/v1')) {
               state.familyGraph = parsed;
+            } else if (parsed['session.teams-media-flag'] || parsed['host.teams-media'] || parsed['device.appx-nonadmin-policy']) {
+              state.localBundle = state.localBundle || { registry: {}, events: {}, vdiDebugText: '' };
+              Object.assign(state.localBundle.registry, parsed);
+            } else if (Array.isArray(parsed['device.appx-deployment-events']) || Array.isArray(parsed['session.events']) || Array.isArray(parsed['host.events'])) {
+              state.localBundle = state.localBundle || { registry: {}, events: {}, vdiDebugText: '' };
+              Object.assign(state.localBundle.events, parsed);
             }
             $('artifact-file-status').textContent = 'Loaded ' + file.name;
             refreshAll();
           } catch (err) {
-            const sl = Core.parseStateLines(String(reader.result || ''));
+            const rawText = String(reader.result || '');
+            const sl = Core.parseStateLines(rawText);
+            const vdi = Core.parseTeamsVdiDebug(rawText);
             if (sl.valid.length) {
               state.probeStates = state.probeStates.concat(sl.valid);
               $('artifact-file-status').textContent = 'Parsed ' + sl.valid.length + ' state line(s) from ' + file.name;
+              refreshAll();
+            } else if (vdi.findings.length) {
+              state.localBundle = state.localBundle || { registry: {}, events: {}, vdiDebugText: '' };
+              state.localBundle.vdiDebugText = rawText;
+              $('artifact-file-status').textContent = 'Parsed ' + vdi.findings.length + ' Teams VDI diagnostic code(s) from ' + file.name;
               refreshAll();
             } else {
               setDevText($('artifact-file-error'), 'Could not parse ' + file.name + ' as Estate Facts / Assessment Report JSON or state line.', 'Could not parse ' + file.name + ' as Estate Facts (C11) / Assessment Report (C21) JSON or state line.');
