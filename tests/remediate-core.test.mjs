@@ -418,4 +418,26 @@ test('parseTeamsVdiDebug() extracts loadErrc/deployErrc codes and diagnose() sur
   assert.ok(diag.primary.signals.some((s) => s.includes('Teams vdi_debug loadErrc=16389')));
 });
 
+test('diagnose() ingests avd-current-state localBundle (registry.json, events.json, vdiDebugText)', () => {
+  const diag = Core.diagnose({
+    localBundle: {
+      registry: {
+        'session.teams-media-flag': { IsWVDEnvironment: 0 },
+        'device.appx-nonadmin-policy': { BlockNonAdminUserInstall: 1 }
+      },
+      events: {
+        'device.appx-deployment-events': [
+          { Id: 401, LevelDisplayName: 'Error', ProviderName: 'Microsoft-Windows-AppXDeployment-Server' }
+        ]
+      },
+      vdiDebugText: 'loadErrc=16389'
+    }
+  });
+  assert.equal(diag.primary.playbook.id, 'pb-m365-teams-slimcore-not-optimized');
+  assert.ok(diag.primary.signals.some((s) => s.includes('IsWVDEnvironment is 0')));
+  assert.ok(diag.primary.signals.some((s) => s.includes('BlockNonAdminUserInstall=1')));
+  assert.ok(diag.primary.signals.some((s) => s.includes('AppXDeploymentServer reported 1')));
+  assert.ok(diag.primary.signals.some((s) => s.includes('Local bundle vdi_debug loadErrc=16389')));
+});
+
 
