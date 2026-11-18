@@ -14,7 +14,7 @@ const Platforms = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/platforms.
 test('remediate-core.js PLAYBOOKS and DOMAINS match playbooks/catalog.json and contain zero hardcoded avd-sandbox strings', () => {
   assert.deepEqual(Core.DOMAINS, Catalog.domains);
   assert.deepEqual(Core.PLAYBOOKS, Catalog.playbooks);
-  assert.equal(Core.PLAYBOOKS.length, 14);
+  assert.equal(Core.PLAYBOOKS.length, 15);
   const rawCatalog = fs.readFileSync(path.join(ROOT, 'playbooks/catalog.json'), 'utf8');
   assert.doesNotMatch(rawCatalog, /avd-sandbox/i, 'playbooks/catalog.json must be tenant-agnostic');
 });
@@ -386,4 +386,23 @@ test('hostTelemetryCommand() and evaluateMeasuredUsage() support native host tel
   assert.ok(diag.all.some((f) => f.playbook.id === 'pb-fsx-storage-throttling' && f.signals.some((s) => s.includes('Measured usage'))));
   assert.ok(diag.all.some((f) => f.playbook.id === 'pb-conn-shortpath-blocked' && f.signals.some((s) => s.includes('rttMsByRegion'))));
 });
+
+test("diagnose() matches pb-m365-teams-slimcore-not-optimized for Teams 'unable to optimize your virtual desktop' symptoms", () => {
+  const diag = Core.diagnose({
+    domain: 'identity-m365',
+    query: "We're unable to optimize your virtual desktop in Windows 365 Teams (SlimCore Media Not Connected, error 16389)",
+    c11: {
+      facts: {
+        'c11.m365.teamsMediaOptimizationState': 'disabled'
+      }
+    },
+    c21: {
+      checks: [
+        { id: 'asm-m365-teams-vdi-optimization', outcome: 'gap' }
+      ]
+    }
+  });
+  assert.equal(diag.primary.playbook.id, 'pb-m365-teams-slimcore-not-optimized');
+});
+
 

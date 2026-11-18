@@ -517,6 +517,37 @@
         swarmAction: 'host.stop',
         swarmKql: 'wvd-control-plane-changes-7d.kql'
       }
+    },
+    {
+      id: 'pb-m365-teams-slimcore-not-optimized',
+      domain: 'identity-m365',
+      plane: 'm365',
+      pillar: 'performance',
+      severity: 'high',
+      title: "Teams VDI media optimization failing ('We're unable to optimize your virtual desktop' / SlimCore Media Not Connected)",
+      bottomLine: 'Teams on AVD or Windows 365 cannot connect to the local SlimCore VDI media engine, forcing audio/video onto the VM due to outdated Windows App, web browser client usage, BlockNonAdminUserInstall/WDAC blocking the SlimCore MSIX plugin, or missing IsWVDEnvironment=1 on custom images.',
+      keywords: ['unable to optimize', 'optimize your virtual desktop', 'not optimized', 'slimcore', 'slimcore media not connected', 'msteamspluginavd', 'blocknonadminuserinstall', 'iswvdenvironment', 'teams vdi', 'webrtc', '16389', '16002', '24018', 'windows 365'],
+      c11Triggers: [
+        { path: 'c11.m365.teamsMediaOptimizationState', equals: 'disabled' }
+      ],
+      c21Checks: ['asm-m365-teams-vdi-optimization'],
+      probeId: 'probe-m365-vdi-policies',
+      citations: [
+        { id: 'ref:teams-on-avd#media-optimization', source: 'avd-assess:methods/performance.md', claim: 'Teams VDI SlimCore/WebRTC offload requires native Windows App on the endpoint, SlimCore MSIX plugin staging allowed (non-admin/WDAC), and IsWVDEnvironment=1 on session hosts.' }
+      ],
+      remediation: {
+        plane: 'm365',
+        kind: 'lz-parameter',
+        name: 'enableTeamsVdiOptimization',
+        costEstimate: '$0.00 (M365/Intune VDI policy, endpoint Windows App update, and host registry configuration)',
+        blastRadius: 'AVD session hosts / Cloud PCs (HKLM\\SOFTWARE\\Microsoft\\Teams\\IsWVDEnvironment=1) and endpoint Windows App / SlimCore MSIX allowlisting.',
+        actionSummary: 'Update local Windows App (avoid web client) with background run allowed, allow Microsoft.Teams.SlimCoreVdiHost MSIX for non-admin/WDAC endpoints, verify IsWVDEnvironment=1 on hosts, and fully quit/restart Teams.',
+        rollbackSummary: 'Revert M365/Intune policy assignments and restore prior HKLM\\SOFTWARE\\Microsoft\\Teams registry state.',
+        c24Change: { kind: 'lz-parameter', plane: 'm365', name: 'enableTeamsVdiOptimization', to: true },
+        lzStage: { stage: 2, repo: 'avd-ops/avd-m365', deployEntrypoint: 'scripts/Deploy-AvdM365.ps1', manifest: 'm365-manifest.json', orchestratorCommand: './scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes m365 -DryRun' },
+        swarmAction: 'host.drain',
+        swarmKql: 'wvd-control-plane-changes-7d.kql'
+      }
     }
   ];
 

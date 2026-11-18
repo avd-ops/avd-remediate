@@ -121,6 +121,14 @@ $planeRunbookSteps = switch ($pb.id) {
             verifyCheck    = 'Re-run probe-fsx-storage-latency and confirm Azure Files latency and reclaimed VHDX capacity'
         }
     }
+    'pb-m365-teams-slimcore-not-optimized' {
+        [ordered]@{
+            preflightCheck = 'GET M365 VDI policy state, check HKLM\SOFTWARE\Microsoft\Teams\IsWVDEnvironment=1 on host, and inspect Teams Core\vdi_debug.txt (Ctrl+Alt+Shift+1) for loadErrc/deployErrc (2000/16002/3002/16389)'
+            applyAction    = 'Update local Windows App (avoid browser client) with background run enabled, allow Microsoft.Teams.SlimCoreVdiHost MSIX past BlockNonAdminUserInstall/WDAC, set IsWVDEnvironment=1 on hosts, and fully quit/restart Teams'
+            rollbackAction = 'Restore prior M365/Intune policy assignments and HKLM\SOFTWARE\Microsoft\Teams registry state from rollback snapshot'
+            verifyCheck    = 'Verify MsTeamsPluginAvd.dll is loaded in local msrdc.exe and Teams Settings > About reports AVD SlimCore Media Optimized'
+        }
+    }
     default {
         [ordered]@{
             preflightCheck = "Run read-only probe $($pb.probeId) on plane $($pb.remediation.plane)"
