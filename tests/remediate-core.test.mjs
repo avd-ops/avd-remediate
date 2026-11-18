@@ -405,4 +405,17 @@ test("diagnose() matches pb-m365-teams-slimcore-not-optimized for Teams 'unable 
   assert.equal(diag.primary.playbook.id, 'pb-m365-teams-slimcore-not-optimized');
 });
 
+test('parseTeamsVdiDebug() extracts loadErrc/deployErrc codes and diagnose() surfaces exact root-cause signals', () => {
+  const parsed = Core.parseTeamsVdiDebug('vdi_debug: loadErrc=16389, deployErrc: 24018');
+  assert.deepEqual(parsed.codes, ['16389', '24018']);
+  assert.match(parsed.findings[0].summary, /BlockNonAdminUserInstall/);
+  assert.match(parsed.findings[1].summary, /download or stage/);
+
+  const diag = Core.diagnose({
+    query: 'Teams vdi_debug.txt: loadErrc=16389'
+  });
+  assert.equal(diag.primary.playbook.id, 'pb-m365-teams-slimcore-not-optimized');
+  assert.ok(diag.primary.signals.some((s) => s.includes('Teams vdi_debug loadErrc=16389')));
+});
+
 
