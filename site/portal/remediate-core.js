@@ -1415,6 +1415,34 @@
     };
   }
 
+  const TICKET_PROVIDERS = ['mock', 'jira-jsm', 'servicenow', 'github'];
+  const TICKET_ID_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+  function normalizeTicketRef(ref) {
+    if (!ref || typeof ref !== 'object') return null;
+    const provider = String(ref.provider || '').toLowerCase();
+    const ticketId = String(ref.ticketId || '');
+    if (TICKET_PROVIDERS.indexOf(provider) < 0) {
+      throw new Error('Unsupported ticketRef.provider: ' + provider);
+    }
+    if (!TICKET_ID_RE.test(ticketId)) {
+      throw new Error('Invalid ticketRef.ticketId');
+    }
+    const out = {
+      schema: 'avd-ticket-ref/v1',
+      provider: provider,
+      ticketId: ticketId
+    };
+    if (ref.correlationId !== undefined && ref.correlationId !== null && ref.correlationId !== '') {
+      const corr = String(ref.correlationId);
+      if (!TICKET_ID_RE.test(corr)) {
+        throw new Error('Invalid ticketRef.correlationId');
+      }
+      out.correlationId = corr;
+    }
+    return out;
+  }
+
   // Build Path B: Schema-valid C24 remediation plan (avd-remediation-plan/v1, contracts/schemas/remediation-plan.schema.json).
   function buildC24Plan(findings, opts) {
     const o = opts || {};
@@ -1545,23 +1573,29 @@
       basis.review = String(o.reviewSha256);
     }
 
+    const ticketRef = o.ticketRef ? normalizeTicketRef(o.ticketRef) : null;
+    const extensions = {
+      'avd-remediate': {
+        contract: 'C24',
+        generatedAt: now,
+        generator: 'avd-remediate/0.1.0',
+        upstreamPins: UPSTREAM_PINS,
+        summary: summary,
+        planes: byPlane,
+        controlPlaneStages: stageCommands
+      }
+    };
+    if (ticketRef) {
+      extensions['avd-ops-ticket'] = ticketRef;
+    }
+
     const plan = {
       schema: 'avd-remediation-plan/v1',
       estate: estate,
       plannedOn: plannedOn,
       basis: basis,
       items: items,
-      extensions: {
-        'avd-remediate': {
-          contract: 'C24',
-          generatedAt: now,
-          generator: 'avd-remediate/0.1.0',
-          upstreamPins: UPSTREAM_PINS,
-          summary: summary,
-          planes: byPlane,
-          controlPlaneStages: stageCommands
-        }
-      }
+      extensions: extensions
     };
 
     Object.defineProperty(plan, 'contract', { value: 'C24', enumerable: false });
@@ -1580,7 +1614,8 @@
     const now = (opts && opts.generatedAt) || new Date().toISOString();
     const actionId = rem.swarmAction && SWARM_ACTIONS[rem.swarmAction] ? rem.swarmAction : 'host.drain';
     const swarmActionSpec = SWARM_ACTIONS[actionId];
-    return {
+    const ticketRef = opts && opts.ticketRef ? normalizeTicketRef(opts.ticketRef) : null;
+    const handoff = {
       schema: 'avd-swarm-plan-proposal/v1',
       generatedAt: now,
       sourceTool: 'avd-remediate',
@@ -1621,6 +1656,10 @@
         lzStage: rem.lzStage || null
       }
     };
+    if (ticketRef) {
+      handoff.ticketRef = ticketRef;
+    }
+    return handoff;
   }
 
   const ASSISTANT_MODES = ['guru', 'red_team', 'chief_of_staff'];
@@ -2300,6 +2339,7 @@
     buildMeasuredUsage: buildMeasuredUsage,
     buildC24Plan: buildC24Plan,
     buildSwarmHandoff: buildSwarmHandoff,
+    normalizeTicketRef: normalizeTicketRef,
     answerChat: answerChat,
     classifyScope: classifyScope,
     checkVerdictPhrase: checkVerdictPhrase,
