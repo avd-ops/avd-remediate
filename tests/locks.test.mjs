@@ -109,7 +109,7 @@ test('buildC24Plan() JSON output conforms strictly to avd-assess contracts/schem
   const allowedItemKeys = new Set(['order', 'check', 'plane', 'outcome', 'pillar', 'severity', 'claims', 'source', 'change']);
   const claimRegex = /^(ref:[a-z0-9][a-z0-9-]{1,63}#[A-Za-z0-9][A-Za-z0-9.:-]{0,63}|gap:[a-z0-9][a-z0-9-]{1,63})$/;
 
-  assert.equal(plan.items.length, 15);
+  assert.equal(plan.items.length, 17);
   plan.items.forEach((item, idx) => {
     for (const k of Object.keys(item)) {
       assert.ok(allowedItemKeys.has(k), `Unexpected C24 item property: ${k}`);
@@ -143,7 +143,7 @@ test('buildC24Plan() JSON output conforms strictly to avd-assess contracts/schem
   });
 
   assert.ok(plan.extensions && plan.extensions['avd-remediate']);
-  assert.equal(plan.extensions['avd-remediate'].summary.totalItems, 15);
+  assert.equal(plan.extensions['avd-remediate'].summary.totalItems, 17);
 });
 
 test('buildC25BenchmarkResult() and buildMeasuredUsage() conform strictly to avd-assess benchmark-result.schema.json and measured-usage.schema.json', () => {

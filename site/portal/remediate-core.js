@@ -548,6 +548,70 @@
         swarmAction: 'host.drain',
         swarmKql: 'wvd-control-plane-changes-7d.kql'
       }
+    },
+    {
+      id: 'pb-host-timezone-redirection',
+      domain: 'hosts',
+      plane: 'intune',
+      pillar: 'operations',
+      severity: 'low',
+      title: 'Session time zone redirection missing (sessions show host UTC time instead of user local time)',
+      bottomLine: 'Users see the session host or Azure datacenter time zone because fEnableTimeZoneRedirection is not set to 1 in the golden image or Intune multi-session host baseline.',
+      keywords: ['timezone', 'time zone', 'redirection', 'utc', 'clock', 'local time', 'fenabletimezoneredirection'],
+      c11Triggers: [
+        { path: 'c11.intune.multiSessionCatalogProfiles', equals: 0 }
+      ],
+      c21Checks: ['asm-intune-hosts-managed'],
+      probeId: 'probe-host-time-sync',
+      citations: [
+        { id: 'ref:terminal-services-policy-csp#timezone-redirection-policy', source: 'avd-assess:references/terminal-services-policy-csp.yaml', claim: 'Setting fEnableTimeZoneRedirection=1 under Terminal Services policy lets supported clients pass their local time zone to the remote session.' },
+        { id: 'obs:timezone-redirection-in-golden-image', source: 'avd-assess:observations/timezone-redirection-in-golden-image.yaml', claim: 'Golden images and the Intune multi-session baseline both enforce fEnableTimeZoneRedirection=1.' }
+      ],
+      remediation: {
+        plane: 'intune',
+        kind: 'lz-setting',
+        name: 'intune-settings-catalog-timezone-redirection',
+        costEstimate: '$0.00 (Intune Settings Catalog / golden image registry policy)',
+        blastRadius: 'Session hosts in the target host pool; applies on next user sign-in or reconnect.',
+        actionSummary: 'Verify fEnableTimeZoneRedirection=1 in the golden image and deploy the Intune multi-session baseline with ADMX_TerminalServer TS_TIME_ZONE enabled.',
+        rollbackSummary: 'Restore previous Settings Catalog assignment state from rollback snapshot.',
+        c24Change: { kind: 'lz-setting', plane: 'intune', name: 'intune-settings-catalog-timezone-redirection' },
+        lzStage: { stage: 2, repo: 'avd-ops/avd-intune', deployEntrypoint: 'scripts/Deploy-AvdIntune.ps1', manifest: 'intune-manifest.json', orchestratorCommand: './scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes intune -DryRun' },
+        swarmAction: 'host.drain',
+        swarmKql: 'wvd-control-plane-changes-7d.kql'
+      }
+    },
+    {
+      id: 'pb-host-w32time-clock-skew',
+      domain: 'hosts',
+      plane: 'azure',
+      pillar: 'reliability',
+      severity: 'high',
+      title: 'Windows Time service (W32Time) stopped or host clock skew breaking Kerberos / Entra auth',
+      bottomLine: 'Session host clock drift (>5 minutes) or a disabled W32Time service causes KRB_AP_ERR_SKEW Kerberos failures, Entra/WAM token errors, and skewed monitoring timestamps.',
+      keywords: ['w32time', 'w32tm', 'ntp', 'clock skew', 'time sync', 'krb_ap_err_skew', 'time drift', 'vmictimeprovider', 'nt5ds'],
+      c11Triggers: [
+        { path: 'c11.hostPool.sessionHosts.domainJoined', greaterThan: 0 }
+      ],
+      c21Checks: ['asm-host-health-checks'],
+      probeId: 'probe-host-time-sync',
+      citations: [
+        { id: 'ref:windows-vm-time-sync#azure-vm-time-sources', source: 'avd-assess:references/windows-vm-time-sync.yaml', claim: 'AD-joined VMs follow NT5DS domain hierarchy; Entra-joined VMs use VMICTimeProvider or NTP.' },
+        { id: 'ref:kerberos-clock-skew#five-minute-default', source: 'avd-assess:references/kerberos-clock-skew.yaml', claim: 'Kerberos tolerates up to 5 minutes of clock skew before authentication fails.' }
+      ],
+      remediation: {
+        plane: 'azure',
+        kind: 'lz-setting',
+        name: 'w32time-service-resync',
+        costEstimate: '$0.00 (host W32Time service check and w32tm /resync)',
+        blastRadius: 'Target session host only; restores W32Time service and resynchronizes system clock.',
+        actionSummary: 'Verify W32Time is running (Skip in WDOT), confirm w32tm /query /source (NT5DS for AD-joined, VMICTimeProvider/NTP for Entra-joined), and run w32tm /resync.',
+        rollbackSummary: 'No persistent infrastructure change; revert any manual W32Time registry override if applied.',
+        c24Change: { kind: 'lz-setting', plane: 'azure', name: 'w32time-service-resync' },
+        lzStage: { stage: 2, repo: 'avd-ops/avd-azure', deployEntrypoint: 'scripts/deploy/deploy.sh', manifest: 'azure-outputs.json', orchestratorCommand: './scripts/deploy/Invoke-AvdControlPlanes.ps1 -Planes azure -DryRun' },
+        swarmAction: 'host.restart-agent',
+        swarmKql: 'wvd-agent-health-latest-7d.kql'
+      }
     }
   ];
 
