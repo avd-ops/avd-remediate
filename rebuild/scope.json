@@ -145,6 +145,14 @@
       "command": "az rest --method get",
       "uriPattern": "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/scopes/admin/environments",
       "facts": ["c11.powerPlatform.dedicatedEnvironments", "c11.powerPlatform.dlpPoliciesCoveringAvdEnv", "c11.powerPlatform.enterprisePoliciesCount", "c11.powerPlatform.avdDay2FlowsActive"]
+    },
+    "probe-host-time-sync": {
+      "plane": "azure",
+      "domain": "hosts",
+      "transport": "run-command-get",
+      "method": "GET",
+      "command": "Get-Service",
+      "facts": ["c11.hostPool.sessionHosts.entraJoined", "c11.hostPool.sessionHosts.domainJoined"]
     }
   }
 }

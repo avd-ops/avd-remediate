@@ -14,7 +14,7 @@ const Platforms = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/platforms.
 test('remediate-core.js PLAYBOOKS and DOMAINS match playbooks/catalog.json and contain zero hardcoded avd-sandbox strings', () => {
   assert.deepEqual(Core.DOMAINS, Catalog.domains);
   assert.deepEqual(Core.PLAYBOOKS, Catalog.playbooks);
-  assert.equal(Core.PLAYBOOKS.length, 15);
+  assert.equal(Core.PLAYBOOKS.length, 17);
   const rawCatalog = fs.readFileSync(path.join(ROOT, 'playbooks/catalog.json'), 'utf8');
   assert.doesNotMatch(rawCatalog, /avd-sandbox/i, 'playbooks/catalog.json must be tenant-agnostic');
 });
