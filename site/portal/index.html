@@ -347,6 +347,17 @@
           </div>
         </div>
 
+        <div class="field-row">
+          <label for="ticket-provider-select">Optional Ticket Ref (ADR 0027)</label>
+          <select id="ticket-provider-select">
+            <option value="">None</option>
+            <option value="jira-jsm">jira-jsm</option>
+            <option value="servicenow">servicenow</option>
+            <option value="mock">mock</option>
+          </select>
+          <input type="text" id="ticket-id-input" placeholder="e.g. AVD-2 or INC0010001" maxlength="64">
+        </div>
+
         <div class="path-tabs" role="group" aria-label="Remediation delivery paths">
           <button type="button" class=" path-tab" data-path="day2" id="tab-path-day2">Path A: Day-2 Fix Script</button>
           <button type="button" class="secondary path-tab" data-path="c24" id="tab-path-c24">Path B: Plane-Routed Remediation Plan<span class="dev-id"> (C24)</span></button>

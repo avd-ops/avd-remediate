@@ -1,0 +1,49 @@
+name: Ticket Triage (JSM)
+
+on:
+  repository_dispatch:
+    types: [jira-ticket-created]
+  workflow_dispatch:
+    inputs:
+      ticket_id:
+        description: "Optional Jira ticket key (e.g. AVD-2). Leave empty to triage all open tickets."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    name: Triage Jira JSM ticket (read-only)
+    runs-on: ubuntu-latest
+    if: ${{ secrets.JIRA_BASE_URL != '' && secrets.JIRA_USER_EMAIL != '' && secrets.JIRA_API_TOKEN != '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run avd-remediate triageTicket
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY || 'AVD' }}
+          DISPATCH_TICKET_ID: ${{ github.event.client_payload.ticket_id || inputs.ticket_id || '' }}
+        run: |
+          node -e "
+            import('./scripts/ticket-adapter.mjs').then(async (m) => {
+              const adapter = m.createTicketAdapter({ provider: 'jira-jsm' });
+              const ids = process.env.DISPATCH_TICKET_ID
+                ? [process.env.DISPATCH_TICKET_ID]
+                : (await adapter.listOpenTickets()).map((t) => t.id);
+              for (const id of ids) {
+                const res = await m.triageTicket(adapter, id);
+                console.log('Triaged', res.ticketRef.ticketId, '->', res.swarmHandoff.action.id);
+              }
+            });
+          "
