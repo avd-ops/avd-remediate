@@ -9,7 +9,7 @@ const Core = require(path.join(ROOT, 'site/portal/remediate-core.js'));
 const DEFAULT_JIRA_STATUS_MAP = {
   new: 'Waiting for support',
   triaging: 'In Progress',
-  awaiting_approval: 'Waiting for approval',
+  awaiting_approval: 'Pending',
   resolved: 'Resolved',
 };
 
@@ -154,7 +154,7 @@ function createJiraJsmTicketAdapter(options = {}) {
         fields: {
           project: { key: projectKey },
           summary: payload.title,
-          issuetype: { name: payload.issueType || '[System] Incident' },
+          issuetype: { name: payload.issueType || process.env.JIRA_ISSUE_TYPE || '[System] Service request' },
           description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: payload.description || '' }] }] },
         },
       });
