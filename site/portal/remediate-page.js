@@ -428,10 +428,11 @@
     $('remediate-term-label').textContent = pb.id + ' (' + state.remediationMode + ')';
     $('remediate-cmd-code').textContent = cmdBuilt.command;
 
-    const c24 = Core.buildC24Plan([top]);
+    const ticketRef = getTicketRef();
+    const c24 = Core.buildC24Plan([top], ticketRef ? { ticketRef: ticketRef } : undefined);
     $('c24-json-code').textContent = JSON.stringify(c24, null, 2);
 
-    const swarm = Core.buildSwarmHandoff(pb, top.signals);
+    const swarm = Core.buildSwarmHandoff(pb, top.signals, ticketRef ? { ticketRef: ticketRef } : undefined);
     $('swarm-json-code').textContent = JSON.stringify(swarm, null, 2);
 
     ['day2', 'c24', 'swarm'].forEach(function (k) {
@@ -445,6 +446,20 @@
         tab.classList.add('secondary');
       }
     });
+  }
+
+  function getTicketRef() {
+    const provEl = $('ticket-provider-select');
+    const idEl = $('ticket-id-input');
+    if (!provEl || !idEl) return null;
+    const provider = String(provEl.value || '').trim();
+    const ticketId = String(idEl.value || '').trim();
+    if (!provider || !ticketId) return null;
+    try {
+      return Core.normalizeTicketRef({ provider: provider, ticketId: ticketId });
+    } catch (_e) {
+      return null;
+    }
   }
 
   function renderStep5(diag) {
@@ -1348,7 +1363,7 @@
         signals: diag.primary.signals,
         probeStates: state.probeStates,
         verifyState: state.verifyState,
-        c24Plan: Core.buildC24Plan([diag.primary])
+        c24Plan: Core.buildC24Plan([diag.primary], getTicketRef() ? { ticketRef: getTicketRef() } : undefined)
       };
       downloadBlob('incident-' + diag.primary.playbook.id + '.json', JSON.stringify(bundle, null, 2), 'application/json');
     });
@@ -1364,7 +1379,7 @@
         signals: diag.primary.signals,
         probeStates: state.probeStates,
         verifyState: state.verifyState,
-        c24Plan: Core.buildC24Plan([diag.primary])
+        c24Plan: Core.buildC24Plan([diag.primary], getTicketRef() ? { ticketRef: getTicketRef() } : undefined)
       };
       if (!state.serverOnline) {
         downloadBlob('incident-' + diag.primary.playbook.id + '.json', JSON.stringify(bundle, null, 2), 'application/json');
